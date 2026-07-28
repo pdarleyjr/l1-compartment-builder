@@ -1,0 +1,11 @@
+name = "l1-state-sync"
+main = "index.js"
+compatibility_date = "2024-01-01"
+account_id = "265122b6d6f29457b0ca950c55f3ac6e"
+
+[[kv_namespaces]]
+binding = "L1_STATE"
+id = "ab51b926224c4400bd5c8f7b488d887b"
+
+[ai]
+binding = "AI"

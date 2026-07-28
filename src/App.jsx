@@ -1,0 +1,2177 @@
+import React, { useState, useMemo, useEffect, useRef } from 'react';
+import {
+  Settings, LayoutGrid, CheckCircle, Trash2, ChevronRight, ChevronLeft, ChevronDown,
+  AlertCircle, RotateCcw, Printer, Package, Image as ImageIcon,
+  Download, Wifi, WifiOff, Ruler, Plus, X, Upload, Sparkles, Loader2,
+  Star, Lock, Menu, Pencil, Save, Layers, CheckSquare, Square, ListPlus,
+} from 'lucide-react';
+
+const WORKER_URL = 'https://l1-state-sync.pdarleyjr.workers.dev';
+
+// ─── Master inventory from L1 Mid-Mount Inventory Checklist (Excel) ───────────
+// qty = default total required quantity; users can edit in Inventory Status
+const MASTER_INVENTORY = [
+  { name: "(4) 2.5-5 in Spanners W/Bracket (HSSW-401)",                          qty: 2  },
+  { name: "1 1/2 Fog Nozzles",                                                    qty: 1  },
+  { name: "1 Ton Griphoist",                                                       qty: 1  },
+  { name: "1 3/4 Fog Nozzle / 2 1/2 Fog Nozzle",                                 qty: 2  },
+  { name: "1 3/4 in Fog Nozzle (Elkhart Chief XD 175 GPM @ 75psi)",                    qty: 5  },
+  { name: "1.5 in Smooth Bore Tip",                                                qty: 4  },
+  { name: "1.75 in Combat Ready Hose",                                             qty: 12 },
+  { name: "16 in PPV Fan, 2x12Ah Batteries, Shore Power (V16-80-12-SP-WH)",       qty: 1  },
+  { name: "2.5 gal Water Extinguisher",                                            qty: 1  },
+  { name: "2.5 in Gate Valve",                                                     qty: 3  },
+  { name: "2.5 in Gated Wye",                                                      qty: 4  },
+  { name: "2.5 in to Storz Hydrant Gate",                                          qty: 1  },
+  { name: "36 in Bolt Cutter",                                                      qty: 2  },
+  { name: "3 in Fog Nozzle",                                                        qty: 1  },
+  { name: "4 ft Pike Pole/Hook",                                                    qty: 2  },
+  { name: "5 in LDH Hose 100 ft Sections (PF-50Y-100)",                            qty: 8  },
+  { name: "5 in Storz Cap W/Cable (A01ST)",                                         qty: 4  },
+  { name: "5-Way LDH Manifold RV&PG (H400-50-50-25NH)",                            qty: 1  },
+  { name: "6 lb Flathead Axe",                                                      qty: 2  },
+  { name: "6 lb Pickhead Axe",                                                      qty: 2  },
+  { name: "7/8 in Smoothbore Nozzle (Elkhart 150 GPM @ 50psi - 2nd High Rise Pack)",  qty: 1  },
+  { name: "8 lb Sledge Hammer",                                                     qty: 2  },
+  { name: "Adapter 5 in Storz x 5 in NH",                                           qty: 2  },
+  { name: "Aerial Fog Nozzle/Tips",                                                 qty: 2  },
+  { name: "Big 10 3 in x 15 ft Hose Section (B10-30W-15)",                         qty: 2  },
+  { name: "Big 10 3 in x 3 ft Hose Sections (B10-30W-3)",                          qty: 2  },
+  { name: "Blitzfire Package Monitor, Bracket, Max-Force (KXC-32-NH1)",             qty: 1  },
+  { name: "Bolt Cutters Mounting Kit (K5029-1)",                                    qty: 1  },
+  { name: "CR 522 E3 Connect Ram (w/ Extensions)",                                   qty: 1  },
+  { name: "Cellar Nozzle",                                                           qty: 1  },
+  { name: "CO2 Extinguisher",                                                        qty: 1  },
+  { name: "Chains with Tips Set / Extrication Bag",                                 qty: 1  },
+  { name: "DeWalt 1/2 in Impact Wrench w/ Socket Set",                              qty: 1  },
+  { name: "DeWalt 18 in Chainsaw w/ Bullet Blade",                                  qty: 1  },
+  { name: "DeWalt DCPS612AG2 K-Saw",                                                qty: 1  },
+  { name: "Double Female 2.5 in NH Adapters (3S2525)",                              qty: 4  },
+  { name: "Double Male 2.5 in NH Adapters (3G2525)",                                qty: 8  },
+  { name: "E3/EWXT 9Ah Batt, Saltwater",                                            qty: 6  },
+  { name: "EWXT/E3 Charger 110-240V",                                               qty: 3  },
+  { name: "Fire Wedge Cribbing (Step/Chock)",                                       qty: 4  },
+  { name: "Flathead Axe Hanger/Pocket Kit (K5011-Y)",                               qty: 1  },
+  { name: "Foam Eductor 125 GPM 1.5 in x 1.5 in (UE-125-NF)",                      qty: 1  },
+  { name: "FoxFury Nomad 360 Scene Light",                                           qty: 1  },
+  { name: "Hookloks Sold in Pairs (I001)",                                           qty: 4  },
+  { name: "Hydrant Assist 5STZ x 5STZ x 5STZ x 4.734x7TPC (ARSF2T2T2T)",           qty: 1  },
+  { name: "Irons",                                                                   qty: 2  },
+  { name: "Ironslok Door Control Kit (K5003-Y)",                                    qty: 1  },
+  { name: "Jumbo Divider 5.0 in Storz x 8.0 in Female (AX1ST-NX)",                 qty: 2  },
+  { name: "Oasis 4-Way Hydrant Assist Valve Miami Thread (ARM02T2T2T)",             qty: 1  },
+  { name: "Pickhead Axe Hanger/Pocket Kit (K5012-Y)",                               qty: 1  },
+  { name: "Pro-Flow 5 in x 15 ft LDH Sections (PF-50Y-15)",                        qty: 1  },
+  { name: "Pro-Flow 5 in x 50 ft LDH Sections (PF-50Y-50)",                        qty: 3  },
+  { name: "Reducer (2.5 to 1.5)",                                                   qty: 2  },
+  { name: "Rescue Saw Mount Kit Yellow Strap (K5030-Y)",                            qty: 1  },
+  { name: "Rope Rescue Equip.",                                                      qty: 1  },
+  { name: "Rope Rescue Gear / Harnesses (Class II/III)",                            qty: 6  },
+  { name: "S 789 E3 Connect Cutter",                                                qty: 1  },
+  { name: "SP 777 E3 Connect Spreader",                                             qty: 1  },
+  { name: "SawZall (20v/60v Flex batt.)",                                           qty: 2  },
+  { name: "Sledgehammer Hanger/Pocket Kit (K5010-12)",                              qty: 1  },
+  { name: "Trash Hook / NY Roof Hook",                                               qty: 2  },
+  { name: "Triple Wrench Set / Spanner Set",                                         qty: 8  },
+  { name: "Vehicle Mount Bracket 7 in (12933)",                                     qty: 2  },
+  { name: "Holmatro V-Strut",                                                       qty: 4  },
+  { name: "Hi-Lift Jack",                                                            qty: 1  },
+];
+
+const INVENTORY_BY_NAME = Object.fromEntries(MASTER_INVENTORY.map(i => [i.name, i]));
+
+// ─── Approximate dimensions from L1_equipment_approx_sizes.csv ───────────────
+const DIMENSIONS = {
+  "(4) 2.5-5 in Spanners W/Bracket (HSSW-401)":                          "20 × 8 × 4 in (bracketed set)",
+  "1 1/2 Fog Nozzles":                                                    "10.8 × 4.5 × 4.9 in",
+  "1 Ton Griphoist":                                                       "20.75 × 9.75 × 4.5 in (body only)",
+  "1 3/4 Fog Nozzle / 2 1/2 Fog Nozzle":                                 "11–13 × 5–7 × 5–7 in",
+  "1 3/4 in Fog Nozzle (Elkhart Chief XD 175 GPM @ 75psi)":                    "10.8 × 4.5 × 4.9 in",
+  "1.5 in Smooth Bore Tip":                                               "4 × 2.5 × 2.5 in",
+  "1.75 in Combat Ready Hose":                                            "18–22 × 18–22 × 4 in (rolled/stowed per section)",
+  "16 in PPV Fan, 2x12Ah Batteries, Shore Power (V16-80-12-SP-WH)":      "24.25 × 23.75 × 12.25 in",
+  "2.5 gal Water Extinguisher":                                           "24 × 7 × 7 in",
+  "2.5 in Gate Valve":                                                    "11 × 7 × 7 in",
+  "2.5 in Gated Wye":                                                     "10 × 12 × 5 in",
+  "2.5 in to Storz Hydrant Gate":                                         "14 × 10 × 9 in",
+  "36 in Bolt Cutter":                                                    "36 × 8 × 2 in",
+  "3 in Fog Nozzle":                                                      "13 × 7 × 7 in",
+  "4 ft Pike Pole/Hook":                                                  "48 × 5 × 3 in",
+  "5 in LDH Hose 100 ft Sections (PF-50Y-100)":                          "46 × 46 × 8 in (rolled/stowed)",
+  "5 in Storz Cap W/Cable (A01ST)":                                       "7 × 7 × 3 in",
+  "5-Way LDH Manifold RV&PG (H400-50-50-25NH)":                          "17 × 24 × 13 in",
+  "6 lb Flathead Axe":                                                    "36 × 8 × 2.5 in",
+  "6 lb Pickhead Axe":                                                    "36 × 8 × 2.5 in",
+  "7/8 in Smoothbore Nozzle (Elkhart 150 GPM @ 50psi - 2nd High Rise Pack)": "7 × 2.5 × 2.5 in",
+  "8 lb Sledge Hammer":                                                   "36 × 6 × 2.5 in",
+  "Adapter 5 in Storz x 5 in NH":                                        "7 × 7 × 6 in",
+  "Aerial Fog Nozzle/Tips":                                               "13 × 7 × 7 in",
+  "Big 10 3 in x 15 ft Hose Section (B10-30W-15)":                       "16 × 16 × 5 in (rolled/stowed)",
+  "Big 10 3 in x 3 ft Hose Sections (B10-30W-3)":                        "10 × 5 × 5 in (coiled/stowed)",
+  "Blitzfire Package Monitor, Bracket, Max-Force (KXC-32-NH1)":          "23 × 15 × 15 in (with storage bracket)",
+  "Bolt Cutters Mounting Kit (K5029-1)":                                  "8 × 4 × 3 in (bracket footprint)",
+  "CR 522 E3 Connect Ram (w/ Extensions)":                                "25.8 × 5.5 × 12.9 in (retracted); extensions bag ~24 × 8 × 6 in",
+  "Cellar Nozzle":                                                        "36 × 3 × 3 in",
+  "CO2 Extinguisher":                                                     "28 × 8 × 8 in",
+  "Chains with Tips Set / Extrication Bag":                               "24 × 12 × 8 in (bagged)",
+  "DeWalt 1/2 in Impact Wrench w/ Socket Set":                           "20 × 15 × 5 in (case); wrench alone ~8.8 × 4.25 × 10.9 in",
+  "DeWalt 18 in Chainsaw w/ Bullet Blade":                               "35–40 × 10–12 × 10–13 in",
+  "DeWalt DCPS612AG2 K-Saw":                                             "25–30 × 9–12 × 12–15 in",
+  "Double Female 2.5 in NH Adapters (3S2525)":                           "4.5 × 3.5 × 3.5 in",
+  "Double Male 2.5 in NH Adapters (3G2525)":                             "4.5 × 3.5 × 3.5 in",
+  "E3/EWXT 9Ah Batt, Saltwater":                                         "7 × 4 × 5 in (each battery)",
+  "EWXT/E3 Charger 110-240V":                                            "9 × 6 × 4 in",
+  "Fire Wedge Cribbing (Step/Chock)":                                    "24.5 × 5.75 × 10.75 in",
+  "Flathead Axe Hanger/Pocket Kit (K5011-Y)":                            "10.3 × 2.5 × 6 in (bracket); ~12 × 6 × 6 in (kit)",
+  "Foam Eductor 125 GPM 1.5 in x 1.5 in (UE-125-NF)":                   "18 × 5 × 5 in",
+  "FoxFury Nomad 360 Scene Light":                                        "39.9 × 4.6 × 4.6 in (stowed); 102 in (deployed)",
+  "Hookloks Sold in Pairs (I001)":                                        "4 × 3 × 2 in (per pair)",
+  "Hydrant Assist 5STZ x 5STZ x 5STZ x 4.734x7TPC (ARSF2T2T2T)":        "20 × 18 × 14 in",
+  "Irons":                                                                "36 × 9 × 3 in (paired set)",
+  "Ironslok Door Control Kit (K5003-Y)":                                  "33 × 8 × 11.5 in",
+  "Jumbo Divider 5.0 in Storz x 8.0 in Female (AX1ST-NX)":              "17 × 15 × 12 in",
+  "Oasis 4-Way Hydrant Assist Valve Miami Thread (ARM02T2T2T)":          "20 × 18 × 14 in",
+  "Pickhead Axe Hanger/Pocket Kit (K5012-Y)":                            "10.3 × 2.75 × 7.5 in (bracket); ~12 × 7 × 8 in (kit)",
+  "Pro-Flow 5 in x 15 ft LDH Sections (PF-50Y-15)":                     "20 × 20 × 8 in (rolled/stowed)",
+  "Pro-Flow 5 in x 50 ft LDH Sections (PF-50Y-50)":                     "34 × 34 × 8 in (rolled/stowed)",
+  "Reducer (2.5 to 1.5)":                                                "3.5 × 3.5 × 3.5 in",
+  "Rescue Saw Mount Kit Yellow Strap (K5030-Y)":                         "14 × 8 × 6 in (bracket footprint)",
+  "Rope Rescue Equip.":                                                   "24 × 18 × 12 in (bagged kit)",
+  "Rope Rescue Gear / Harnesses (Class II/III)":                         "18 × 12 × 6 in (per harness/bagged)",
+  "S 789 E3 Connect Cutter":                                              "38–40 × 10–11 × 11 in",
+  "SP 777 E3 Connect Spreader":                                           "39.3 × 12.2 × 10 in",
+  "SawZall (20v/60v Flex batt.)":                                        "18 × 4 × 8 in",
+  "Sledgehammer Hanger/Pocket Kit (K5010-12)":                           "8 × 3.4 × 4.5 in (bracket); ~10 × 6 × 5 in (kit)",
+  "Trash Hook / NY Roof Hook":                                            "72 × 8 × 3 in",
+  "Triple Wrench Set / Spanner Set":                                      "18 × 8 × 3 in",
+  "Vehicle Mount Bracket 7 in (12933)":                                  "7 × 4 × 3 in",
+  "Holmatro V-Strut":                                                    "42.5 × 5.9 × 8.3 in",
+  "Hi-Lift Jack":                                                        "10 × 5 × 38 in (W × D × H)",
+};
+
+// ─── Visual descriptions (from CSV mapping array) — used by AI image generation
+const VISUAL_DESCRIPTIONS = {
+  "(4) 2.5-5 in Spanners W/Bracket (HSSW-401)": "set of four silver spanner wrenches mounted in a black compartment bracket",
+  "1 1/2 Fog Nozzles": "silver and black firefighter adjustable fog nozzle with bale handle and pistol grip",
+  "1 Ton Griphoist": "compact heavy-duty manual wire-rope hoist/winch body with lever handle and steel cable hardware",
+  "1 3/4 Fog Nozzle / 2 1/2 Fog Nozzle": "pair of firefighter fog nozzles, one smaller handline nozzle and one larger 2.5 inch nozzle with bale handles",
+  "1 3/4 in Fog Nozzle (Elkhart Chief XD 175 GPM @ 75psi)": "silver and black firefighter adjustable fog nozzle with bale handle and pistol grip (Elkhart Chief XD model)",
+  "1.5 in Smooth Bore Tip": "short silver smooth bore nozzle tip, tapered cylindrical metal fire stream tip",
+  "1.75 in Combat Ready Hose": "rolled or folded 1.75 inch attack hose section, double-jacket fire hose with couplings",
+  "16 in PPV Fan, 2x12Ah Batteries, Shore Power (V16-80-12-SP-WH)": "compact red or yellow 16 inch positive-pressure ventilation fan with protective shroud, battery packs, and shore-power cord",
+  "2.5 gal Water Extinguisher": "polished silver stainless water can extinguisher with hose, handle, and pressure gauge",
+  "2.5 in Gate Valve": "silver 2.5 inch fire hose gate valve with one control handle and threaded couplings",
+  "2.5 in Gated Wye": "silver gated wye valve with one inlet, two outlets, two control handles, and fire hose couplings",
+  "2.5 in to Storz Hydrant Gate": "silver hydrant gate valve with 2.5 inch threaded inlet/outlet and Storz connection, control handle on top",
+  "36 in Bolt Cutter": "long-handled bolt cutter with black/silver jaws and red or black grips",
+  "3 in Fog Nozzle": "large silver firefighter fog nozzle with wide bumper, bale handle, and heavy-duty coupling",
+  "4 ft Pike Pole/Hook": "long four-foot firefighter pike pole with a metal hook tip and slender shaft",
+  "5 in LDH Hose 100 ft Sections (PF-50Y-100)": "large yellow 5 inch LDH supply hose section, large roll or accordion fold with Storz couplings",
+  "5 in Storz Cap W/Cable (A01ST)": "round silver 5 inch Storz cap with attached cable lanyard",
+  "5-Way LDH Manifold RV&PG (H400-50-50-25NH)": "large silver five-way LDH manifold with multiple Storz ports, gated valve handles, relief valve, and pressure gauge",
+  "6 lb Flathead Axe": "firefighter flathead axe with long handle and broad flat axe head",
+  "6 lb Pickhead Axe": "firefighter pickhead axe with long handle, axe blade on one side and pointed pick on the other",
+  "7/8 in Smoothbore Nozzle (Elkhart 150 GPM @ 50psi - 2nd High Rise Pack)": "short silver smoothbore handline nozzle tip with 7/8 inch opening and threaded coupling",
+  "8 lb Sledge Hammer": "heavy sledge hammer with long handle and rectangular steel striking head",
+  "Adapter 5 in Storz x 5 in NH": "large silver round fire hose adapter with 5 inch Storz lugs on one side and NH threads on the other",
+  "Aerial Fog Nozzle/Tips": "large silver aerial master-stream fog nozzle and detachable smooth bore tips",
+  "Big 10 3 in x 15 ft Hose Section (B10-30W-15)": "short folded or coiled double-jacket fire hose section with 3 inch couplings",
+  "Big 10 3 in x 3 ft Hose Sections (B10-30W-3)": "very short coiled 3 inch double-jacket hose jumper with couplings",
+  "Blitzfire Package Monitor, Bracket, Max-Force (KXC-32-NH1)": "portable red/black Blitzfire ground monitor with folding base, Max-Force nozzle, and storage bracket",
+  "Bolt Cutters Mounting Kit (K5029-1)": "black molded compartment bracket for securing bolt cutters",
+  "CR 522 E3 Connect Ram (w/ Extensions)": "blue and silver cylindrical hydraulic rescue ram, long and heavy",
+  "Cellar Nozzle": "long slender cellar nozzle pipe with pointed or perforated tip for below-grade firefighting",
+  "CO2 Extinguisher": "red portable carbon dioxide fire extinguisher cylinder with black horn/nozzle and carry handle",
+  "Chains with Tips Set / Extrication Bag": "black heavy-duty extrication carry bag containing silver rescue chains, hooks, and pulling tips",
+  "DeWalt 1/2 in Impact Wrench w/ Socket Set": "yellow and black cordless impact wrench with black socket set case and metal sockets",
+  "DeWalt 18 in Chainsaw w/ Bullet Blade": "yellow and black battery-powered chainsaw with elongated guide bar and bullet-tipped blade",
+  "DeWalt DCPS612AG2 K-Saw": "yellow and black heavy-duty concrete cut-off saw with a large circular abrasive blade",
+  "Double Female 2.5 in NH Adapters (3S2525)": "small silver double-female 2.5 inch NH threaded fire hose adapter coupling",
+  "Double Male 2.5 in NH Adapters (3G2525)": "small silver double-male 2.5 inch NH threaded fire hose adapter coupling",
+  "E3/EWXT 9Ah Batt, Saltwater": "black rectangular Hurst rescue tool battery pack with blue label accents",
+  "EWXT/E3 Charger 110-240V": "black compact battery charger cradle for Hurst rescue tool batteries with power cord",
+  "Fire Wedge Cribbing (Step/Chock)": "stacked black or yellow stepped cribbing wedges/chocks, rectangular tapered stabilization blocks",
+  "Flathead Axe Hanger/Pocket Kit (K5011-Y)": "black and yellow compartment mounting pocket and strap bracket shaped to secure a flathead axe",
+  "Foam Eductor 125 GPM 1.5 in x 1.5 in (UE-125-NF)": "inline silver foam eductor appliance with 1.5 inch couplings and small pickup tube connection",
+  "FoxFury Nomad 360 Scene Light": "black and yellow portable telescoping scene light with tripod legs and cylindrical light head",
+  "Hi-Lift Jack": "classic red and black 48-inch Hi-Lift off-road farm jack, tall vertical rack-and-pinion lifting jack with large red body and steel hardware",
+  "Holmatro V-Strut": "blue and silver telescoping vehicle stabilization strut, heavy-duty extrication support strut with adjustable length and rubber foot pad",
+  "Hookloks Sold in Pairs (I001)": "pair of small black PAC Hooklok compartment retention clips/brackets",
+  "Hydrant Assist 5STZ x 5STZ x 5STZ x 4.734x7TPC (ARSF2T2T2T)": "large silver hydrant assist valve with multiple 5 inch Storz connections and one threaded hydrant connection",
+  "Irons": "paired forcible-entry irons: silver Halligan bar and flathead axe, long firefighter hand tools stored together",
+  "Ironslok Door Control Kit (K5003-Y)": "yellow Ironslok door control kit, long narrow molded storage kit for forcible-entry door control",
+  "Jumbo Divider 5.0 in Storz x 8.0 in Female (AX1ST-NX)": "large silver jumbo hydrant divider adapter with 5 inch Storz and 8 inch female connection",
+  "Oasis 4-Way Hydrant Assist Valve Miami Thread (ARM02T2T2T)": "large silver multi-port hydrant assist valve with four outlets/inlets and valve handles",
+  "Pickhead Axe Hanger/Pocket Kit (K5012-Y)": "black and yellow compartment mounting pocket and strap bracket shaped to secure a pickhead axe",
+  "Pro-Flow 5 in x 15 ft LDH Sections (PF-50Y-15)": "short yellow 5 inch LDH supply hose section, rolled or folded with Storz couplings",
+  "Pro-Flow 5 in x 50 ft LDH Sections (PF-50Y-50)": "large yellow 5 inch LDH supply hose section, rolled or folded with Storz couplings",
+  "Reducer (2.5 to 1.5)": "small silver aluminum fire hose reducer coupling, stepped round adapter from 2.5 inch to 1.5 inch",
+  "Rescue Saw Mount Kit Yellow Strap (K5030-Y)": "black rescue saw mounting bracket with bright yellow retention strap",
+  "Rope Rescue Equip.": "rope rescue equipment kit with ropes, carabiners, pulleys, webbing, and gear bags",
+  "Rope Rescue Gear / Harnesses (Class II/III)": "rope rescue harnesses and soft goods, black/red webbing straps with buckles stored in bags",
+  "S 789 E3 Connect Cutter": "blue and silver heavy-duty hydraulic rescue cutter with curved blades",
+  "SP 777 E3 Connect Spreader": "blue and silver heavy-duty hydraulic rescue spreader tool with pincer arms",
+  "SawZall (20v/60v Flex batt.)": "yellow and black cordless reciprocating saw with pistol grip and straight blade",
+  "Sledgehammer Hanger/Pocket Kit (K5010-12)": "black PAC-style compartment mounting pocket and strap bracket for an 8 to 12 lb sledge hammer",
+  "Trash Hook / NY Roof Hook": "long New York roof hook/trash hook with metal D-handle or hook end and long shaft",
+  "Triple Wrench Set / Spanner Set": "set of compact silver firefighter spanner and hydrant wrenches, flat metal hand tools with hooked jaws",
+  "Vehicle Mount Bracket 7 in (12933)": "small black metal or composite vehicle mounting bracket, rectangular 7 inch hardware piece",
+};
+
+const SLOTS_PER_COMPARTMENT = 15;
+const STORAGE_KEY = 'l1-compartment-builder-v4';
+
+// Rename map: v3 em-dash names → consolidated current names
+const V3_RENAMES = {
+  "1 3/4 in Fog Nozzle — Crosslay 1 (Elkhart Chief XD 175 GPM @ 75psi)":       "1 3/4 in Fog Nozzle (Elkhart Chief XD 175 GPM @ 75psi)",
+  "1 3/4 in Fog Nozzle — Crosslay 2 (Elkhart Chief XD 175 GPM @ 75psi)":       "1 3/4 in Fog Nozzle (Elkhart Chief XD 175 GPM @ 75psi)",
+  "1 3/4 in Fog Nozzle — Crosslay 3 (Elkhart Chief XD 175 GPM @ 75psi)":       "1 3/4 in Fog Nozzle (Elkhart Chief XD 175 GPM @ 75psi)",
+  "1 3/4 in Fog Nozzle — Front Trash Line (Elkhart Chief XD, 175 GPM @ 75psi)":"1 3/4 in Fog Nozzle (Elkhart Chief XD 175 GPM @ 75psi)",
+  "1 3/4 in Fog Nozzle — High Rise Pack (Elkhart Chief XD, 175 GPM @ 75psi)":  "1 3/4 in Fog Nozzle (Elkhart Chief XD 175 GPM @ 75psi)",
+  "7/8 in Smoothbore Nozzle — 2nd High Rise Pack (Elkhart 150 GPM @ 50psi)":   "7/8 in Smoothbore Nozzle (Elkhart 150 GPM @ 50psi - 2nd High Rise Pack)",
+  "CR 522 E3 Connect Ram w/ Extensions":                                         "CR 522 E3 Connect Ram (w/ Extensions)",
+};
+
+// Consolidation map: v4 per-location Elkhart names → single consolidated name
+const CONSOLIDATION_RENAMES = {
+  "1 3/4 in Fog Nozzle (Elkhart Chief XD 175 GPM @ 75psi - Crosslay 1)":       "1 3/4 in Fog Nozzle (Elkhart Chief XD 175 GPM @ 75psi)",
+  "1 3/4 in Fog Nozzle (Elkhart Chief XD 175 GPM @ 75psi - Crosslay 2)":       "1 3/4 in Fog Nozzle (Elkhart Chief XD 175 GPM @ 75psi)",
+  "1 3/4 in Fog Nozzle (Elkhart Chief XD 175 GPM @ 75psi - Crosslay 3)":       "1 3/4 in Fog Nozzle (Elkhart Chief XD 175 GPM @ 75psi)",
+  "1 3/4 in Fog Nozzle (Elkhart Chief XD 175 GPM @ 75psi - Front Trash Line)": "1 3/4 in Fog Nozzle (Elkhart Chief XD 175 GPM @ 75psi)",
+  "1 3/4 in Fog Nozzle (Elkhart Chief XD 175 GPM @ 75psi - High Rise Pack)":   "1 3/4 in Fog Nozzle (Elkhart Chief XD 175 GPM @ 75psi)",
+};
+
+const COMPARTMENTS = [
+  { id: 'CabRearZone', label: 'Rear Zone', side: 'Cab', images: [{ src: '/images/CabRearZone.png', title: 'Compartment Photo' }] },
+  { id: 'LS1', side: 'Left',  images: [{ src: '/images/LS1.png', title: 'Compartment Photo' }] },
+  { id: 'LS2', side: 'Left',  images: [
+    { src: '/images/LS2.png',            title: 'Compartment Photo'    },
+    { src: '/images/LS2_rendering.png',  title: 'Rendering with Tools' },
+  ]},
+  { id: 'LS3', side: 'Left',  images: [{ src: '/images/LS3.png', title: 'Compartment Photo' }] },
+  { id: 'LS4', side: 'Left',  images: [{ src: '/images/LS4.png', title: 'Compartment Photo' }] },
+  { id: 'RS1', side: 'Right', images: [{ src: '/images/RS1.png', title: 'Compartment Photo' }] },
+  { id: 'RS2', side: 'Right', images: [{ src: '/images/RS2.png', title: 'Compartment Photo' }] },
+  { id: 'RS3', side: 'Right', images: [{ src: '/images/RS3.png', title: 'Compartment Photo' }] },
+  { id: 'RS4', side: 'Right', images: [{ src: '/images/RS4.png', title: 'Compartment Photo' }] },
+  { id: 'RS5', side: 'Right', images: [{ src: '/images/RS5.png', title: 'Compartment Photo' }] },
+  { id: 'RR1', label: 'Rear', side: 'Rear',  images: [{ src: '/images/RR1.png', title: 'Compartment Photo' }] },
+];
+
+const OVERVIEWS = [
+  { id: 'CabOverview',   label: 'Cab Overview',        side: 'Cab',   image: '/images/CAB_Overview.png'       },
+  { id: 'LeftOverview',  label: 'Left Side Overview',  side: 'Left',  image: '/images/LeftSide_Overview.png'  },
+  { id: 'RightOverview', label: 'Right Side Overview', side: 'Right', image: '/images/RightSide_Overview.png' },
+  { id: 'RearOverview',  label: 'Rear Overview',       side: 'Rear',  image: '/images/Rear_Overview.png'      },
+];
+
+// Stable display-name lookup: falls back to raw id for compartments without a label
+const COMP_LABEL = Object.fromEntries(COMPARTMENTS.map(c => [c.id, c.label ?? c.id]));
+
+const BUNDLE_COLORS = [
+  { bg: '#fef9c3', border: '#ca8a04', text: '#713f12' },
+  { bg: '#dcfce7', border: '#16a34a', text: '#14532d' },
+  { bg: '#dbeafe', border: '#2563eb', text: '#1e3a8a' },
+  { bg: '#fce7f3', border: '#db2777', text: '#831843' },
+  { bg: '#f3e8ff', border: '#9333ea', text: '#581c87' },
+  { bg: '#ffedd5', border: '#ea580c', text: '#7c2d12' },
+  { bg: '#cffafe', border: '#0891b2', text: '#164e63' },
+  { bg: '#d1fae5', border: '#059669', text: '#064e3b' },
+];
+function nextBundleColor(existing) {
+  const used = existing.map(b => b.colorIdx ?? 0);
+  for (let i = 0; i < BUNDLE_COLORS.length; i++) {
+    if (!used.includes(i)) return i;
+  }
+  return existing.length % BUNDLE_COLORS.length;
+}
+
+// ─── Compartment physical specs — exact measurements from apparatus diagrams ──
+const COMPARTMENT_SPECS = {
+  LS1: 'Left Side 1 (LS1): Forward lower compartment, left side of Pierce apparatus. Overall compartment: 38" H × 17 3/4" W × 27" D. Door opening: 38" H × 15" W. Top shelf: 24" D × 17" W × 18" H. Lower open bay: 20" H. Two-zone vertical layout.',
+  LS2: 'Left Side 2 (LS2): Large main compartment, left side of Pierce apparatus. Overall height: 44" H. Pull-Out Tilt Shelf (upper): 23 3/4" D × 34 1/4" W. Fixed Shelf (middle): 40" W. Pull-Out Tray (lower): 26" D × 37" W. Full three-tier vertical layout. Primary rescue tool bay.',
+  LS3: 'Left Side 3 (LS3): Wide horizontal upper compartment, left side. Overall: 80" W × 16 3/8" H × 27" D. Left section: 22" W × 27" D with fixed shelf 26 1/2" W × 23" D (16" H). Right section: 55" W × 27" D (55" fixed width interior). Tilt/pull-out tray: 23 1/2" H × 52" W. Very wide shallow compartment spanning across the left side.',
+  LS4: 'Left Side 4 (LS4): Rear upper compartment, left side. Overall: 20" H tall. Door opening: 22" H × 26 1/2" W. Pull-Out Tray: 26" D × 25" W. Inverter installed in upper-left corner. Shallow horizontal bay.',
+  RS1: 'Right Side 1 (RS1): Forward lower compartment, right side of Pierce apparatus. Overall compartment: 38" H × 17 3/4" W × 27" D. Door opening: 38" H × 15" W. Top shelf: 24" D × 17" W × 18" H. Lower open bay: 20" H. Two-zone vertical layout.',
+  RS2: 'Right Side 2 (RS2): Large main compartment, right side of Pierce apparatus. Overall height: 44" H. Pull-Out Tilt Shelf (upper): 23 3/4" D × 34 1/4" W. Fixed Shelf (middle): 40" W. Pull-Out Tray (lower): 26" D × 37" W. Full three-tier vertical layout.',
+  RS3: 'Right Side 3 (RS3): Wide horizontal compartment, right side. Fixed tray: 15" D × 56" W × 16" H total interior height. Very wide and shallow. Note: tires located directly below this compartment.',
+  RS4: 'Right Side 4 (RS4): Rear lower compartment, right side. Overall specs: 20" H × 25" W × 26 3/4" D. Fixed shelf in upper half. Pull-Out Tray in lower half. Note: exhaust located below this compartment.',
+  RS5: 'Right Side 5 (RS5): Rear tall narrow compartment, right side. Overall (inside): 9" D × 29 1/2" H × 17" W. Door opening: 15 1/2" W × 29 1/2" H. Fixed shelf present. Very shallow compartment — only 9 inches deep.',
+  RR1: 'Rear 1 (RR1): Rear compartment of Pierce apparatus. Rear-mounted equipment storage bay.',
+  CabRearZone: 'Cab Rear Zone (CabRearZone): Interior rear seating area of the Pierce apparatus cab. Stores personnel gear, SCBA, and cab-accessible equipment behind the front seats.',
+};
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+function generateUid() {
+  return Math.random().toString(36).slice(2, 9) + Date.now().toString(36);
+}
+
+function buildEmpty() {
+  const s = {};
+  COMPARTMENTS.forEach(c => { s[c.id] = Array(SLOTS_PER_COMPARTMENT).fill(''); });
+  return s;
+}
+
+function migrateAllocations(allocs) {
+  // Seed all current compartments with empty slots so newly-added compartments
+  // (e.g. RR1) are never missing from allocations even when restoring old data.
+  const out = {};
+  COMPARTMENTS.forEach(c => { out[c.id] = Array(SLOTS_PER_COMPARTMENT).fill(''); });
+  for (const [compId, slots] of Object.entries(allocs)) {
+    if (out[compId] === undefined) continue; // ignore obsolete compartment ids
+    out[compId] = slots.map(v => {
+      const renamed = V3_RENAMES[v] ?? v;
+      return CONSOLIDATION_RENAMES[renamed] ?? renamed;
+    });
+  }
+  return out;
+}
+
+function loadSaved() {
+  try {
+    // v4 key — migrateAllocations seeds any compartments added after this data was written
+    let raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) {
+      const saved = JSON.parse(raw);
+      if (saved._ts !== undefined && saved.allocations && typeof saved.allocations === 'object') {
+        return { ...saved, allocations: migrateAllocations(saved.allocations) };
+      }
+    }
+    // v3 key — used em-dash item names; migrate those too
+    raw = localStorage.getItem('l1-compartment-builder-v3');
+    if (raw) {
+      const saved3 = JSON.parse(raw);
+      if (saved3._ts !== undefined && saved3.allocations && typeof saved3.allocations === 'object') {
+        return {
+          _ts: saved3._ts,
+          allocations: migrateAllocations(saved3.allocations),
+          customQtys: saved3.customQtys ?? {},
+        };
+      }
+    }
+    // v2 key — allocations stored as a flat object (no wrapper)
+    raw = localStorage.getItem('l1-compartment-builder-v2');
+    if (!raw) return null;
+    const saved2 = JSON.parse(raw);
+    if (!saved2 || typeof saved2 !== 'object') return null;
+    return { _ts: 0, allocations: migrateAllocations(saved2), customQtys: {} };
+  } catch { return null; }
+}
+
+// ─── CompartmentImage ─────────────────────────────────────────────────────────
+function CompartmentImage({ src, alt }) {
+  const [err, setErr] = useState(false);
+  return (
+    <div className="w-full bg-slate-100 rounded-lg border border-slate-300 flex items-center justify-center overflow-hidden min-h-[260px] print-image-container">
+      {!err ? (
+        <img src={src} alt={alt}
+          className="max-w-full max-h-[500px] object-contain p-2"
+          onError={() => setErr(true)} />
+      ) : (
+        <div className="flex flex-col items-center text-slate-400 p-8 text-center">
+          <ImageIcon size={48} className="mb-3 opacity-40" />
+          <p className="font-semibold text-slate-600 text-sm">{alt}</p>
+          <p className="text-xs mt-1 text-slate-500">Image not available</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── App ──────────────────────────────────────────────────────────────────────
+export default function App() {
+  const [activeTab, setActiveTab]     = useState('LeftOverview');
+  const [allocations, setAllocations] = useState(() => loadSaved()?.allocations ?? buildEmpty());
+  const [customQtys, setCustomQtys]   = useState(() => loadSaved()?.customQtys  ?? {});
+  const [customTools, setCustomTools] = useState(() => loadSaved()?.customTools  ?? []);
+  const [uploadedImages, setUploadedImages] = useState(() => {
+    try {
+      const raw = localStorage.getItem('l1-compartment-builder-uploads');
+      if (!raw) return {};
+      const parsed = JSON.parse(raw);
+      const migrated = {};
+      for (const [compId, imgs] of Object.entries(parsed)) {
+        migrated[compId] = imgs
+          .filter(img => img.dataUrl && !img.dataUrl.includes('W29iamVjdCBPYmplY3Rd') && img.dataUrl.length > 100)
+          .map(img => img.uid ? img : { ...img, uid: generateUid() });
+      }
+      return migrated;
+    } catch { return {}; }
+  });
+  const [featuredImages, setFeaturedImages] = useState(() => {
+    try {
+      const raw = localStorage.getItem('l1-compartment-builder-featured');
+      return raw ? JSON.parse(raw) : {};
+    } catch { return {}; }
+  });
+  const [syncStatus, setSyncStatus]   = useState('connecting');
+  const [pullDone, setPullDone]       = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [removedItems, setRemovedItems] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('l1-compartment-builder-removed') || '[]'); }
+    catch { return []; }
+  });
+  const [customDimensions, setCustomDimensions] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('l1-compartment-builder-cdims') || '{}'); }
+    catch { return {}; }
+  });
+  const [editingItem, setEditingItem] = useState(null);
+  const [editValues, setEditValues]   = useState({});
+  const [bundles, setBundles]               = useState(() => loadSaved()?.bundles ?? {});
+  const [bundleMode, setBundleMode]         = useState(false);
+  const [selectedSlots, setSelectedSlots]   = useState([]);
+  const [bundleNamePrompt, setBundleNamePrompt] = useState(false);
+  const [bundleNameInput, setBundleNameInput]   = useState('');
+  const [bulkFillOpen, setBulkFillOpen]     = useState(false);
+  const [bulkFillItem, setBulkFillItem]     = useState('');
+  const [bulkFillQty, setBulkFillQty]       = useState(1);
+  const [expandedBundles, setExpandedBundles] = useState({});
+
+  const isPullingRef  = useRef(false);
+  const lastPushTs    = useRef(0);
+  const imgLastPushTs = useRef(0);
+
+  // ── Merged inventory: standard items + user-added custom tools ───────────
+  const effectiveInventory = useMemo(() => [
+    ...MASTER_INVENTORY.filter(i => !removedItems.includes(i.name)),
+    ...customTools,
+  ], [customTools, removedItems]);
+
+  // ── Merged dimensions: static map + user overrides + custom tool dimensions
+  const effectiveDimensions = useMemo(() => {
+    const dims = { ...DIMENSIONS, ...customDimensions };
+    customTools.forEach(t => { if (t.dimensions) dims[t.name] = t.dimensions; });
+    return dims;
+  }, [customTools, customDimensions]);
+
+  // ── Helper: effective qty (custom override, then default, then custom tool)
+  const getQty = (name) => {
+    if (customQtys[name] !== undefined) return customQtys[name];
+    if (INVENTORY_BY_NAME[name]) return INVENTORY_BY_NAME[name].qty;
+    const ct = customTools.find(t => t.name === name);
+    return ct ? ct.qty : 0;
+  };
+
+  // ── Auto-save to localStorage on every change ────────────────────────────
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      _ts: lastPushTs.current,
+      allocations,
+      customQtys,
+      customTools,
+      bundles,
+    }));
+  }, [allocations, customQtys, customTools, bundles]);
+
+  // ── Push to KV (300ms debounce, waits for initial pull to finish) ────────
+  useEffect(() => {
+    if (!pullDone) return;
+    if (isPullingRef.current) {
+      isPullingRef.current = false;
+      return;
+    }
+    setSyncStatus('syncing');
+    const t = setTimeout(async () => {
+      try {
+        const res = await fetch(`${WORKER_URL}/state`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ allocations, customQtys, customTools, bundles, removedItems, customDimensions }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          // Use the server-assigned timestamp to avoid clock-skew rejection
+          lastPushTs.current = data._serverTs ?? Date.now();
+        }
+        setSyncStatus('synced');
+      } catch {
+        setSyncStatus('offline');
+      }
+    }, 300);
+    return () => clearTimeout(t);
+  }, [pullDone, allocations, customQtys, customTools, bundles, removedItems, customDimensions]);
+
+  // ── Pull from KV every 5s; initial pull on mount ─────────────────────────
+  useEffect(() => {
+    const pull = async (isInitial) => {
+      try {
+        const [stateRes, imgRes] = await Promise.all([
+          fetch(`${WORKER_URL}/state`),
+          fetch(`${WORKER_URL}/images`),
+        ]);
+
+        if (stateRes.ok) {
+          const payload = await stateRes.json();
+          // Use _serverTs (set by worker) to compare; fall back to _ts for old records
+          const remoteTs = payload?._serverTs ?? payload?._ts ?? 0;
+          if (remoteTs && payload?.allocations && (isInitial || remoteTs > lastPushTs.current)) {
+            isPullingRef.current = true;
+            setAllocations(migrateAllocations(payload.allocations));
+            if (payload.customQtys)      setCustomQtys(payload.customQtys);
+            if (payload.customTools)     setCustomTools(payload.customTools);
+            if (payload.bundles)         setBundles(payload.bundles);
+            if (payload.removedItems)    setRemovedItems(payload.removedItems);
+            if (payload.customDimensions) setCustomDimensions(payload.customDimensions);
+            lastPushTs.current = remoteTs;
+          }
+        }
+
+        if (imgRes.ok) {
+          const imgPayload = await imgRes.json();
+          const remoteImgTs = imgPayload?._serverTs ?? 0;
+          if (imgPayload && (isInitial || remoteImgTs > imgLastPushTs.current)) {
+            imgLastPushTs.current = remoteImgTs;
+
+            if (imgPayload.uploadedImages) {
+              // Merge: keep every local image, add any remote images missing locally (dedup by uid)
+              setUploadedImages(prev => {
+                let changed = false;
+                const merged = { ...prev };
+                for (const [cid, remoteImgs] of Object.entries(imgPayload.uploadedImages)) {
+                  const localImgs = prev[cid] ?? [];
+                  const localUids = new Set(localImgs.map(u => u.uid).filter(Boolean));
+                  const newImgs   = (remoteImgs ?? []).filter(u => u.uid && !localUids.has(u.uid));
+                  if (newImgs.length > 0) {
+                    merged[cid] = [...localImgs, ...newImgs];
+                    changed = true;
+                  }
+                }
+                return changed ? merged : prev;
+              });
+            }
+
+            if (imgPayload.featuredImages) {
+              // Remote wins for any compartment where local has no featured set
+              // On initial pull, remote always wins (it's the canonical shared state)
+              setFeaturedImages(prev => {
+                let changed = false;
+                const merged = { ...prev };
+                for (const [cid, remoteFeatured] of Object.entries(imgPayload.featuredImages)) {
+                  if (remoteFeatured && (!prev[cid] || isInitial)) {
+                    merged[cid] = remoteFeatured;
+                    changed = true;
+                  }
+                }
+                return changed ? merged : prev;
+              });
+            }
+            // Don't set isImgPullingRef — merged state should be pushed back to KV
+          }
+        }
+
+        setSyncStatus('synced');
+      } catch {
+        setSyncStatus('offline');
+      } finally {
+        if (isInitial) setPullDone(true);
+      }
+    };
+    pull(true);
+    const id = setInterval(() => pull(false), 5000);
+    return () => clearInterval(id);
+  }, []);
+
+  // ── Derived: placed count per tool, per compartment breakdown ────────────
+  const placedStats = useMemo(() => {
+    const stats = {};
+    effectiveInventory.forEach(item => { stats[item.name] = { total: 0, byComp: {} }; });
+    COMPARTMENTS.forEach(comp => {
+      allocations[comp.id].forEach(slot => {
+        if (slot && stats[slot]) {
+          stats[slot].total += 1;
+          stats[slot].byComp[comp.id] = (stats[slot].byComp[comp.id] ?? 0) + 1;
+        }
+      });
+    });
+    return stats;
+  }, [allocations, effectiveInventory]);
+
+  const totalPlaced = useMemo(
+    () => Object.values(placedStats).reduce((a, s) => a + s.total, 0),
+    [placedStats]
+  );
+
+  const totalReq = useMemo(
+    () => effectiveInventory.reduce((a, i) => a + getQty(i.name), 0),
+    [customQtys, effectiveInventory] // eslint-disable-line react-hooks/exhaustive-deps
+  );
+
+  // ── Options available for a dropdown slot ────────────────────────────────
+  const getOptions = (currentValue) =>
+    effectiveInventory.filter(item => {
+      const placed = placedStats[item.name]?.total ?? 0;
+      const qty = getQty(item.name);
+      return qty > 0 && (placed < qty || item.name === currentValue);
+    });
+
+  // ── Persist uploaded images and featured selections to localStorage ─────────
+  useEffect(() => {
+    localStorage.setItem('l1-compartment-builder-uploads', JSON.stringify(uploadedImages));
+  }, [uploadedImages]);
+
+  useEffect(() => {
+    localStorage.setItem('l1-compartment-builder-featured', JSON.stringify(featuredImages));
+  }, [featuredImages]);
+
+  // ── Push images to KV (1s debounce, waits for initial pull) ─────────────
+  // No isPullingRef gate here — after a merge-pull we want to push the merged
+  // state back so all other devices receive the full combined image set.
+  useEffect(() => {
+    if (!pullDone) return;
+    const t = setTimeout(async () => {
+      try {
+        const res = await fetch(`${WORKER_URL}/images`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ uploadedImages, featuredImages }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          imgLastPushTs.current = data._serverTs ?? Date.now();
+        }
+      } catch { /* silent — main sync status is owned by state push */ }
+    }, 1000);
+    return () => clearTimeout(t);
+  }, [pullDone, uploadedImages, featuredImages]);
+
+  useEffect(() => {
+    localStorage.setItem('l1-compartment-builder-removed', JSON.stringify(removedItems));
+  }, [removedItems]);
+
+  useEffect(() => {
+    localStorage.setItem('l1-compartment-builder-cdims', JSON.stringify(customDimensions));
+  }, [customDimensions]);
+
+  useEffect(() => {
+    setBundleMode(false);
+    setSelectedSlots([]);
+    setBulkFillOpen(false);
+    setBulkFillItem('');
+    setBulkFillQty(1);
+    setBundleNamePrompt(false);
+    setBundleNameInput('');
+    setExpandedBundles({});
+  }, [activeTab]);
+
+  // ── Image upload handlers ─────────────────────────────────────────────────
+  const handleUploadImage = (compId, { dataUrl, title, fileName }) => {
+    setUploadedImages(prev => ({
+      ...prev,
+      [compId]: [...(prev[compId] ?? []), { dataUrl, title, fileName, uid: generateUid() }],
+    }));
+  };
+
+  const handleDeleteUploadedImage = (compId, imgIdx) => {
+    setUploadedImages(prev => {
+      const current = prev[compId] ?? [];
+      const deleted = current[imgIdx];
+      if (deleted?.uid) {
+        setFeaturedImages(fp => {
+          const f = fp[compId];
+          if (f?.kind === 'uploaded' && f?.uid === deleted.uid) {
+            const next = { ...fp };
+            delete next[compId];
+            return next;
+          }
+          return fp;
+        });
+      }
+      return { ...prev, [compId]: current.filter((_, i) => i !== imgIdx) };
+    });
+  };
+
+  const handleSetFeatured = (compId, imageRef) => {
+    setFeaturedImages(prev => {
+      const current = prev[compId];
+      const isSame = current?.kind === imageRef?.kind &&
+        (imageRef.kind === 'preset' ? current?.src === imageRef?.src : current?.uid === imageRef?.uid);
+      if (isSame) {
+        const next = { ...prev };
+        delete next[compId];
+        return next;
+      }
+      return { ...prev, [compId]: imageRef };
+    });
+  };
+
+  // ── AI image generation ───────────────────────────────────────────────────
+  const handleGenerateAIImage = async (compId, userText) => {
+    const slots = allocations[compId].filter(Boolean);
+    const toolMap = {};
+    slots.forEach(name => { toolMap[name] = (toolMap[name] ?? 0) + 1; });
+    const toolsPayload = Object.entries(toolMap).map(([name, qty]) => ({
+      name, qty,
+      dims: effectiveDimensions[name] || '',
+      visual: VISUAL_DESCRIPTIONS[name] || '',
+    }));
+
+    const res = await fetch(`${WORKER_URL}/generate-image`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        compId,
+        tools: toolsPayload,
+        compartmentSpec: COMPARTMENT_SPECS[compId] || `Compartment ${compId}`,
+        userText: userText || '',
+      }),
+    });
+
+    if (!res.ok) {
+      const errBody = await res.json().catch(() => ({}));
+      throw new Error(errBody.error || `Server error ${res.status}`);
+    }
+    const { dataUrl } = await res.json();
+    if (!dataUrl) throw new Error('No image returned from server');
+    handleUploadImage(compId, { dataUrl, title: 'AI Rendering', fileName: 'ai-rendering.png' });
+  };
+
+  // ── Custom tool CRUD ──────────────────────────────────────────────────────
+  const handleAddTool = ({ name, qty, dimensions }) => {
+    setCustomTools(prev => [...prev, { name, qty, dimensions }]);
+  };
+
+  // ── Inventory row actions ─────────────────────────────────────────────────
+  const handleRemoveItem = (name) => {
+    const isCustom = !INVENTORY_BY_NAME[name];
+    if (!window.confirm(`Remove "${name}" from inventory? It will be cleared from all compartments.`)) return;
+    if (isCustom) {
+      setCustomTools(prev => prev.filter(t => t.name !== name));
+    } else {
+      setRemovedItems(prev => [...prev, name]);
+    }
+    setCustomQtys(prev => { const next = { ...prev }; delete next[name]; return next; });
+    setAllocations(prev => {
+      const next = {};
+      for (const [compId, slots] of Object.entries(prev)) {
+        next[compId] = slots.map(s => s === name ? '' : s);
+      }
+      return next;
+    });
+  };
+
+  const startEdit = (item) => {
+    setEditingItem(item.name);
+    setEditValues({
+      name: item.name,
+      qty: String(getQty(item.name)),
+      dims: effectiveDimensions[item.name] || '',
+    });
+  };
+
+  const saveEdit = (item) => {
+    const isCustom  = !INVENTORY_BY_NAME[item.name];
+    const newQty    = Math.max(0, parseInt(editValues.qty, 10) || 0);
+    const newDims   = (editValues.dims ?? '').trim();
+    const newName   = ((editValues.name ?? '').trim() || item.name);
+    const nameChanged = newName !== item.name;
+
+    if (nameChanged && effectiveInventory.some(
+      i => i.name.toLowerCase() === newName.toLowerCase() && i.name !== item.name
+    )) {
+      alert(`"${newName}" already exists in the inventory.`);
+      return;
+    }
+
+    if (nameChanged) {
+      setAllocations(prev => {
+        const next = {};
+        for (const [compId, slots] of Object.entries(prev)) {
+          next[compId] = slots.map(s => s === item.name ? newName : s);
+        }
+        return next;
+      });
+      setCustomQtys(prev => {
+        const next = { ...prev }; delete next[item.name];
+        return { ...next, [newName]: newQty };
+      });
+      setCustomDimensions(prev => {
+        const next = { ...prev }; delete next[item.name];
+        return newDims ? { ...next, [newName]: newDims } : next;
+      });
+      if (isCustom) {
+        setCustomTools(prev => prev.map(t =>
+          t.name === item.name ? { ...t, name: newName, qty: newQty, dimensions: newDims } : t
+        ));
+      } else {
+        // Promote standard item to custom with new name
+        setRemovedItems(prev => [...prev, item.name]);
+        setCustomTools(prev => [...prev, { name: newName, qty: newQty, dimensions: newDims }]);
+      }
+    } else {
+      if (isCustom) {
+        setCustomTools(prev => prev.map(t =>
+          t.name === item.name ? { ...t, qty: newQty, dimensions: newDims } : t
+        ));
+      }
+      setCustomQtys(prev => ({ ...prev, [item.name]: newQty }));
+      if (newDims) {
+        setCustomDimensions(prev => ({ ...prev, [item.name]: newDims }));
+      } else {
+        setCustomDimensions(prev => { const next = { ...prev }; delete next[item.name]; return next; });
+      }
+    }
+    setEditingItem(null);
+    setEditValues({});
+  };
+
+  // ── Mutations ─────────────────────────────────────────────────────────────
+  const assign = (compId, idx, val) => {
+    setAllocations(prev => {
+      const next = { ...prev, [compId]: [...prev[compId]] };
+      next[compId][idx] = val;
+      return next;
+    });
+  };
+
+  const clearSlot = (compId, idx) => {
+    assign(compId, idx, '');
+    setBundles(prev => {
+      const cb = prev[compId] ?? [];
+      const updated = cb
+        .map(b => ({ ...b, slotIndices: b.slotIndices.filter(si => si !== idx) }))
+        .filter(b => b.slotIndices.length > 0);
+      return { ...prev, [compId]: updated };
+    });
+  };
+
+  const handleBulkFill = (compId) => {
+    if (!bulkFillItem) return;
+    const available  = getQty(bulkFillItem) - (placedStats[bulkFillItem]?.total ?? 0);
+    const emptySlots = (allocations[compId] ?? []).filter(s => !s).length;
+    const canFill    = Math.min(available, emptySlots);
+    const toFill     = Math.min(bulkFillQty, canFill);
+    if (toFill <= 0) {
+      if (available <= 0) {
+        alert(`No remaining capacity for "${bulkFillItem}" — all ${getQty(bulkFillItem)} units are already placed.`);
+      } else {
+        alert(`No empty slots available in compartment ${compId}.`);
+      }
+      return;
+    }
+    let filled = 0;
+    setAllocations(prev => {
+      const slots = [...prev[compId]];
+      for (let i = 0; i < slots.length && filled < toFill; i++) {
+        if (!slots[i]) { slots[i] = bulkFillItem; filled++; }
+      }
+      return { ...prev, [compId]: slots };
+    });
+    if (toFill < bulkFillQty) {
+      alert(`Filled ${toFill} slot${toFill !== 1 ? 's' : ''} (only ${canFill} slot${canFill !== 1 ? 's' : ''} available for "${bulkFillItem}").`);
+    }
+    setBulkFillOpen(false);
+    setBulkFillItem('');
+    setBulkFillQty(1);
+  };
+
+  const handleCreateBundle = (compId) => {
+    const name = bundleNameInput.trim();
+    if (!name) return;
+    // Re-validate: only include slots that are still filled (KV pull may have cleared some)
+    const validSlots = selectedSlots.filter(idx => !!(allocations[compId] ?? [])[idx]);
+    if (validSlots.length === 0) return;
+    const existing = bundles[compId] ?? [];
+    const colorIdx = nextBundleColor(existing);
+    setBundles(prev => ({
+      ...prev,
+      [compId]: [...(prev[compId] ?? []), { id: generateUid(), name, colorIdx, slotIndices: validSlots }],
+    }));
+    setSelectedSlots([]);
+    setBundleMode(false);
+    setBundleNamePrompt(false);
+    setBundleNameInput('');
+  };
+
+  const handleDeleteBundle = (compId, bundleId) => {
+    setBundles(prev => ({
+      ...prev,
+      [compId]: (prev[compId] ?? []).filter(b => b.id !== bundleId),
+    }));
+  };
+
+  const addRow = (compId) => {
+    setAllocations(prev => ({
+      ...prev,
+      [compId]: [...prev[compId], ''],
+    }));
+  };
+
+  const removeLastEmptyRow = (compId) => {
+    setAllocations(prev => {
+      const slots = prev[compId];
+      if (slots.length <= SLOTS_PER_COMPARTMENT) return prev;
+      if (slots[slots.length - 1] !== '') return prev;
+      return { ...prev, [compId]: slots.slice(0, -1) };
+    });
+  };
+
+  const handleReset = () => {
+    if (window.confirm('Clear ALL compartment assignments? This cannot be undone.')) {
+      setAllocations(buildEmpty());
+    }
+  };
+
+  // ── Excel Export ──────────────────────────────────────────────────────────
+  const handleExportExcel = async () => {
+    const XLSX = await import('xlsx');
+
+    // Sheet 1: Compartment Assignments
+    const compHeaders = ['Slot', ...COMPARTMENTS.map(c => c.label ?? c.id)];
+    const compRows = [];
+    const maxSlots = Math.max(SLOTS_PER_COMPARTMENT, ...COMPARTMENTS.map(c => (allocations[c.id] ?? []).length));
+    for (let i = 0; i < maxSlots; i++) {
+      compRows.push([i + 1, ...COMPARTMENTS.map(c => (allocations[c.id] ?? [])[i] || '')]);
+    }
+    const ws1 = XLSX.utils.aoa_to_sheet([compHeaders, ...compRows]);
+
+    // Sheet 2: Inventory Status
+    const invHeaders = ['Equipment Item', 'Total Qty', 'Placed', 'Remaining', 'Assigned To', 'Dimensions', 'Status'];
+    const invRows = effectiveInventory.map(item => {
+      const stats = placedStats[item.name];
+      const qty = getQty(item.name);
+      const placed = stats?.total ?? 0;
+      const remaining = qty - placed;
+      const assignedTo = Object.entries(stats?.byComp ?? {})
+        .map(([comp, cnt]) => cnt > 1 ? `${COMP_LABEL[comp] ?? comp} x${cnt}` : (COMP_LABEL[comp] ?? comp))
+        .join(', ');
+      const status = placed > qty ? 'Over' : remaining === 0 ? 'Complete' : placed > 0 ? 'Partial' : 'Pending';
+      return [item.name, qty, placed, remaining, assignedTo || '', effectiveDimensions[item.name] || '', status];
+    });
+    const ws2 = XLSX.utils.aoa_to_sheet([invHeaders, ...invRows]);
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws1, 'Compartments');
+    XLSX.utils.book_append_sheet(wb, ws2, 'Inventory Status');
+    XLSX.writeFile(wb, 'L1_Compartment_Plan.xlsx');
+  };
+
+  // ── Shared action buttons ─────────────────────────────────────────────────
+  const ActionButtons = () => (
+    <div className="flex items-center gap-2 print:hidden shrink-0">
+      <button onClick={handleExportExcel}
+        className="flex items-center gap-1.5 bg-green-700 hover:bg-green-600 active:bg-green-800 text-white text-sm px-2.5 py-2 rounded transition-colors">
+        <Download size={14} /> <span className="hidden sm:inline">Export Excel</span>
+      </button>
+      <button onClick={() => window.print()}
+        className="flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700 active:bg-slate-900 text-white text-sm px-2.5 py-2 rounded transition-colors">
+        <Printer size={14} /> <span className="hidden sm:inline">Print PDF</span>
+      </button>
+    </div>
+  );
+
+  // ── Sidebar ───────────────────────────────────────────────────────────────
+  const nav = (tab) => { setActiveTab(tab); setSidebarOpen(false); };
+
+  const Sidebar = () => (
+    <div id="sidebar" className="w-64 bg-slate-900 text-slate-300 flex flex-col h-full overflow-y-auto shrink-0 print:hidden">
+      <div className="p-4 bg-slate-950 flex items-center gap-3 shrink-0">
+        <div className="bg-red-600 p-2 rounded-md text-white shrink-0"><Settings size={20} /></div>
+        <div className="flex-1 min-w-0">
+          <p className="font-bold text-white text-sm leading-tight">L1 Mid-Mount</p>
+          <p className="text-[11px] text-slate-400">Compartment Builder</p>
+        </div>
+        <button onClick={() => setSidebarOpen(false)}
+          className="lg:hidden text-slate-400 hover:text-white p-1.5 rounded transition-colors touch-manipulation"
+          aria-label="Close menu">
+          <X size={18} />
+        </button>
+      </div>
+
+      <div className="p-3 flex-1 space-y-4 overflow-y-auto">
+        <div>
+          <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-1.5">Overviews</p>
+          <div className="space-y-0.5">
+            {OVERVIEWS.map(ov => (
+              <SideBtn key={ov.id} active={activeTab === ov.id} onClick={() => nav(ov.id)}>
+                <LayoutGrid size={13} />{ov.label}
+              </SideBtn>
+            ))}
+            <SideBtn active={activeTab === 'inventory'} onClick={() => nav('inventory')}>
+              <Package size={13} />Inventory Status
+            </SideBtn>
+          </div>
+        </div>
+
+        <div>
+          <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-1.5">Cab</p>
+          <div className="space-y-0.5">
+            {COMPARTMENTS.filter(c => c.side === 'Cab').map(comp => (
+              <CompBtn key={comp.id} comp={comp} active={activeTab === comp.id}
+                count={allocations[comp.id].filter(Boolean).length}
+                onClick={() => nav(comp.id)} />
+            ))}
+          </div>
+        </div>
+
+        <div>
+          <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-1.5">Left Side</p>
+          <div className="space-y-0.5">
+            {COMPARTMENTS.filter(c => c.side === 'Left').map(comp => (
+              <CompBtn key={comp.id} comp={comp} active={activeTab === comp.id}
+                count={allocations[comp.id].filter(Boolean).length}
+                onClick={() => nav(comp.id)} />
+            ))}
+          </div>
+        </div>
+
+        <div>
+          <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-1.5">Right Side</p>
+          <div className="space-y-0.5">
+            {COMPARTMENTS.filter(c => c.side === 'Right').map(comp => (
+              <CompBtn key={comp.id} comp={comp} active={activeTab === comp.id}
+                count={allocations[comp.id].filter(Boolean).length}
+                onClick={() => nav(comp.id)} />
+            ))}
+          </div>
+        </div>
+
+        <div>
+          <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-1.5">Rear</p>
+          <div className="space-y-0.5">
+            {COMPARTMENTS.filter(c => c.side === 'Rear').map(comp => (
+              <CompBtn key={comp.id} comp={comp} active={activeTab === comp.id}
+                count={allocations[comp.id].filter(Boolean).length}
+                onClick={() => nav(comp.id)} />
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="p-3 bg-slate-950 border-t border-slate-800 space-y-2">
+        <div className="flex justify-between text-xs text-slate-400">
+          <span>Total Placed:</span>
+          <span className="font-bold text-white bg-slate-800 px-2 py-0.5 rounded">
+            {totalPlaced} / {totalReq}
+          </span>
+        </div>
+        <div className="w-full bg-slate-800 rounded-full h-1.5">
+          <div
+            className="bg-red-500 h-1.5 rounded-full transition-all"
+            style={{ width: `${Math.min(100, (totalPlaced / Math.max(1, totalReq)) * 100)}%` }}
+          />
+        </div>
+
+        <div className={`flex items-center gap-1.5 text-[10px] ${
+          syncStatus === 'synced'     ? 'text-green-400'  :
+          syncStatus === 'syncing'    ? 'text-yellow-400' :
+          syncStatus === 'offline'    ? 'text-red-400'    : 'text-slate-500'
+        }`}>
+          {syncStatus === 'offline' ? <WifiOff size={10} /> : <Wifi size={10} />}
+          {syncStatus === 'connecting' ? 'Connecting...' :
+           syncStatus === 'syncing'    ? 'Syncing...'     :
+           syncStatus === 'synced'     ? 'Synced with team' :
+           'Offline — changes saved locally'}
+        </div>
+
+        <button onClick={handleReset}
+          className="w-full flex items-center justify-center gap-1.5 bg-slate-700 hover:bg-red-700 text-white text-xs py-1.5 rounded transition-colors">
+          <RotateCcw size={12} /> Reset All
+        </button>
+      </div>
+    </div>
+  );
+
+  // ── Inventory Status panel (editable quantities) ──────────────────────────
+  const renderInventory = () => {
+    const fullyAssigned = effectiveInventory.filter(i => {
+      const qty = getQty(i.name);
+      return qty > 0 && (placedStats[i.name]?.total ?? 0) >= qty;
+    }).length;
+
+    return (
+      <div className="flex-1 min-h-0 flex flex-col bg-white overflow-y-auto">
+        <div className="px-4 py-3 sm:p-5 border-b border-slate-200 bg-slate-50 sticky top-0 z-10 flex justify-between items-center gap-2 print:static print:border-0">
+          <div className="min-w-0">
+            <h2 className="text-lg sm:text-xl font-bold text-slate-800">Inventory Status</h2>
+            <p className="text-xs sm:text-sm text-slate-500">
+              {totalPlaced} of {totalReq} placed &mdash; {fullyAssigned}/{effectiveInventory.length} types done
+            </p>
+          </div>
+          <ActionButtons />
+        </div>
+
+        <div className="px-4 sm:px-6 pt-4">
+          <div className="w-full bg-slate-200 rounded-full h-2 mb-1">
+            <div className="bg-red-500 h-2 rounded-full transition-all"
+              style={{ width: `${Math.min(100, (totalPlaced / Math.max(1, totalReq)) * 100)}%` }} />
+          </div>
+          <p className="text-xs text-slate-500 text-right">
+            {Math.round((totalPlaced / Math.max(1, totalReq)) * 100)}% placed
+          </p>
+        </div>
+
+        <div className="p-4 sm:p-6">
+          <div className="overflow-x-auto rounded-lg border border-slate-200 shadow-sm">
+            <table className="w-full text-sm min-w-[600px]">
+              <thead>
+                <tr className="bg-slate-800 text-white text-xs">
+                  <th className="text-left px-4 py-3 font-semibold">Equipment Item</th>
+                  <th className="text-center px-3 py-3 font-semibold w-20">Qty</th>
+                  <th className="text-center px-3 py-3 font-semibold w-16">Placed</th>
+                  <th className="hidden md:table-cell text-center px-3 py-3 font-semibold w-20">Remaining</th>
+                  <th className="hidden lg:table-cell text-left px-4 py-3 font-semibold">Assigned To</th>
+                  <th className="hidden lg:table-cell text-left px-4 py-3 font-semibold">
+                    <span className="flex items-center gap-1"><Ruler size={11} />Dimensions</span>
+                  </th>
+                  <th className="text-center px-3 py-3 font-semibold w-20">Status</th>
+                  <th className="px-2 py-3 font-semibold text-center w-20 print:hidden">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {effectiveInventory.map((item, idx) => {
+                  const stats      = placedStats[item.name];
+                  const qty        = getQty(item.name);
+                  const placed     = stats?.total ?? 0;
+                  const remaining  = qty - placed;
+                  const overPlaced = placed > qty;
+                  const full       = qty > 0 && remaining === 0;
+                  const partial    = placed > 0 && !full && !overPlaced;
+                  const isCustom   = !INVENTORY_BY_NAME[item.name];
+                  const isEditing  = editingItem === item.name;
+
+                  const assignedTo = Object.entries(stats?.byComp ?? {})
+                    .map(([comp, cnt]) => cnt > 1 ? `${COMP_LABEL[comp] ?? comp} ×${cnt}` : (COMP_LABEL[comp] ?? comp))
+                    .join(', ');
+
+                  const statusBadge = overPlaced ? (
+                    <span className="inline-flex items-center gap-1 bg-red-100 text-red-700 text-[10px] font-bold px-2 py-0.5 rounded-full">
+                      <AlertCircle size={10} /> Over
+                    </span>
+                  ) : full ? (
+                    <span className="inline-flex items-center gap-1 bg-green-100 text-green-700 text-[10px] font-bold px-2 py-0.5 rounded-full">
+                      <CheckCircle size={10} /> Done
+                    </span>
+                  ) : placed > 0 ? (
+                    <span className="inline-block bg-blue-100 text-blue-700 text-[10px] font-bold px-2 py-0.5 rounded-full">Partial</span>
+                  ) : (
+                    <span className="inline-block bg-slate-100 text-slate-400 text-[10px] px-2 py-0.5 rounded-full">Pending</span>
+                  );
+
+                  if (isEditing) {
+                    return (
+                      <tr key={item.name} className="bg-amber-50 border-l-4 border-amber-400">
+                        <td className="px-4 py-2">
+                          <div className="flex flex-col gap-0.5">
+                            <input
+                              autoFocus
+                              value={editValues.name ?? ''}
+                              onChange={e => setEditValues(prev => ({ ...prev, name: e.target.value }))}
+                              className="w-full border-2 border-amber-300 rounded px-2 py-1 text-xs focus:ring-2 focus:ring-amber-400 outline-none bg-white text-slate-800 font-medium"
+                            />
+                            {!isCustom && editValues.name && editValues.name !== item.name && (
+                              <span className="text-[9px] text-amber-600">Renaming will convert to custom item</span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-3 py-2 text-center">
+                          <input
+                            type="number" min="0"
+                            value={editValues.qty ?? ''}
+                            onChange={e => setEditValues(prev => ({ ...prev, qty: e.target.value }))}
+                            className="w-14 text-center font-mono border-2 border-amber-300 rounded px-1 py-1 text-xs focus:ring-2 focus:ring-amber-400 outline-none bg-white"
+                          />
+                        </td>
+                        <td className="px-3 py-2 text-center font-mono font-bold">
+                          <span className={placed > 0 ? 'text-blue-700' : 'text-slate-400'}>{placed}</span>
+                        </td>
+                        <td className="hidden md:table-cell px-3 py-2 text-center font-mono font-bold">
+                          <span className={overPlaced ? 'text-red-600' : remaining === 0 ? 'text-green-600' : remaining < qty ? 'text-amber-600' : 'text-slate-400'}>{remaining}</span>
+                        </td>
+                        <td className="hidden lg:table-cell px-4 py-2 text-xs text-slate-500">{assignedTo || <span className="text-slate-300 italic">—</span>}</td>
+                        <td className="hidden lg:table-cell px-4 py-2">
+                          <input
+                            value={editValues.dims ?? ''}
+                            onChange={e => setEditValues(prev => ({ ...prev, dims: e.target.value }))}
+                            placeholder="e.g. 36 × 8 × 2 in"
+                            className="w-full border-2 border-amber-300 rounded px-2 py-1 text-xs focus:ring-2 focus:ring-amber-400 outline-none bg-white font-mono text-slate-700"
+                          />
+                        </td>
+                        <td className="px-3 py-2 text-center">{statusBadge}</td>
+                        <td className="px-2 py-2 print:hidden">
+                          <div className="flex items-center justify-center gap-1">
+                            <button onClick={() => saveEdit(item)} title="Save changes"
+                              className="p-1.5 rounded text-green-600 hover:bg-green-100 active:bg-green-200 transition-colors touch-manipulation">
+                              <Save size={14} />
+                            </button>
+                            <button onClick={() => { setEditingItem(null); setEditValues({}); }} title="Cancel"
+                              className="p-1.5 rounded text-slate-400 hover:bg-slate-100 active:bg-slate-200 transition-colors touch-manipulation">
+                              <X size={14} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  }
+
+                  return (
+                    <tr key={item.name}
+                      className={`transition-colors ${
+                        overPlaced  ? 'bg-red-50'
+                        : full      ? 'bg-green-50'
+                        : partial   ? 'bg-blue-50'
+                        : idx % 2 === 0 ? 'bg-white' : 'bg-slate-50'
+                      }`}>
+                      <td className="px-4 py-2.5 font-medium text-slate-800 text-xs sm:text-sm">
+                        <span>{item.name}</span>
+                        {isCustom && (
+                          <span className="ml-2 text-[9px] font-bold uppercase tracking-wide text-amber-600 bg-amber-50 border border-amber-200 rounded px-1 py-0.5">custom</span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2.5 text-center">
+                        <span className="font-mono font-bold text-slate-700">{qty}</span>
+                      </td>
+                      <td className="px-3 py-2.5 text-center font-mono font-bold">
+                        <span className={placed > 0 ? 'text-blue-700' : 'text-slate-400'}>{placed}</span>
+                      </td>
+                      <td className="hidden md:table-cell px-3 py-2.5 text-center font-mono font-bold">
+                        <span className={
+                          overPlaced        ? 'text-red-600'
+                          : remaining === 0 ? 'text-green-600'
+                          : remaining < qty ? 'text-amber-600'
+                          : 'text-slate-400'
+                        }>{remaining}</span>
+                      </td>
+                      <td className="hidden lg:table-cell px-4 py-2.5 text-xs text-slate-600">
+                        {assignedTo || <span className="text-slate-300 italic">—</span>}
+                      </td>
+                      <td className="hidden lg:table-cell px-4 py-2.5 text-xs">
+                        {effectiveDimensions[item.name]
+                          ? <span className="font-mono text-indigo-700">{effectiveDimensions[item.name]}</span>
+                          : <span className="text-slate-300 italic">—</span>}
+                      </td>
+                      <td className="px-3 py-2.5 text-center">{statusBadge}</td>
+                      <td className="px-2 py-2.5 text-center print:hidden">
+                        <div className="flex items-center justify-center gap-1">
+                          <button onClick={() => startEdit(item)} title="Edit row"
+                            className="p-1.5 rounded text-slate-300 hover:text-blue-500 hover:bg-blue-50 active:bg-blue-100 transition-colors touch-manipulation">
+                            <Pencil size={13} />
+                          </button>
+                          <button onClick={() => handleRemoveItem(item.name)} title="Remove item"
+                            className="p-1.5 rounded text-slate-300 hover:text-red-500 hover:bg-red-50 active:bg-red-100 transition-colors touch-manipulation">
+                            <Trash2 size={13} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          <p className="text-xs text-slate-400 mt-3 text-center print:hidden">
+            Tap <Pencil size={10} className="inline mb-0.5" /> to edit a row (name, qty, dimensions) · Tap <Trash2 size={10} className="inline mb-0.5" /> to remove an item — changes sync instantly.
+          </p>
+          <AddToolForm effectiveInventory={effectiveInventory} onAdd={handleAddTool} />
+        </div>
+      </div>
+    );
+  };
+
+  // ── Overview panel ────────────────────────────────────────────────────────
+  const renderOverview = (ov) => {
+    const sideComps = COMPARTMENTS.filter(c => c.side === ov.side);
+    return (
+      <div className="flex-1 min-h-0 flex flex-col bg-white overflow-y-auto">
+        <div className="px-4 py-3 sm:p-5 border-b border-slate-200 bg-slate-50 sticky top-0 z-10 flex justify-between items-center gap-2 print:static print:border-0">
+          <h2 className="text-lg sm:text-xl font-bold text-slate-800">{ov.label}</h2>
+          <ActionButtons />
+        </div>
+        <div className="p-4 sm:p-6 space-y-5">
+          <CompartmentImage src={ov.image} alt={ov.label} />
+          <div>
+            <h3 className="text-base font-bold text-slate-800 mb-3 border-b pb-2">Compartment Summary</h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3 sm:gap-4">
+              {sideComps.map(comp => {
+                const tools = allocations[comp.id].filter(Boolean);
+                return (
+                  <div key={comp.id} className="bg-slate-50 rounded-lg border border-slate-200 overflow-hidden">
+                    <div className="bg-slate-200 px-4 py-2 font-bold text-slate-700 flex justify-between items-center text-sm">
+                      {comp.label ?? comp.id}
+                      <span className="text-xs bg-white px-2 py-0.5 rounded-full text-slate-600">{tools.length} items</span>
+                    </div>
+                    <div className="p-3">
+                      {tools.length === 0
+                        ? <p className="text-xs text-slate-400 italic">No tools assigned.</p>
+                        : (
+                          <ul className="space-y-1.5">
+                            {tools.map((t, i) => (
+                              <li key={i} className="text-xs flex items-start gap-1.5 text-slate-700">
+                                <CheckCircle size={12} className="text-green-500 mt-0.5 shrink-0" />{t}
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  // ── Compartment panel ─────────────────────────────────────────────────────
+  const renderCompartment = (comp) => {
+    const slots       = allocations[comp.id];
+    const filled      = slots.filter(Boolean).length;
+    const compBundles = bundles[comp.id] ?? [];
+    const slotBundleMap = {};
+    compBundles.forEach(b => b.slotIndices.forEach(si => { slotBundleMap[si] = b; }));
+
+    return (
+      <div className="flex-1 min-h-0 flex flex-col bg-white overflow-y-auto">
+        {/* ── Header ── */}
+        <div className="border-b border-slate-200 bg-slate-50 sticky top-0 z-10 print:static print:border-0">
+          {/* Title row */}
+          <div className="px-4 py-3 flex justify-between items-center gap-2">
+            <div className="min-w-0">
+              <h2 className="text-lg sm:text-xl font-bold text-slate-800">Compartment {comp.label ?? comp.id}</h2>
+              <p className="text-xs sm:text-sm text-slate-500">{filled} of {slots.length} slots filled</p>
+            </div>
+            <div className="print:hidden shrink-0">
+              <ActionButtons />
+            </div>
+          </div>
+
+          {/* Feature toolbar — always visible */}
+          <div className="px-4 pb-3 flex gap-2 print:hidden">
+            <button
+              onClick={() => { setBulkFillOpen(o => !o); setBundleMode(false); setSelectedSlots([]); }}
+              className={`flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-lg font-semibold text-sm transition-colors touch-manipulation ${
+                bulkFillOpen
+                  ? 'bg-blue-600 text-white shadow-sm'
+                  : 'bg-blue-50 hover:bg-blue-100 active:bg-blue-200 text-blue-700 border border-blue-200'
+              }`}>
+              <ListPlus size={16} />
+              Bulk Add to Compartment
+            </button>
+            <button
+              onClick={() => { setBundleMode(o => !o); setSelectedSlots([]); setBulkFillOpen(false); setBundleNamePrompt(false); }}
+              className={`flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-lg font-semibold text-sm transition-colors touch-manipulation ${
+                bundleMode
+                  ? 'bg-purple-600 text-white shadow-sm'
+                  : 'bg-purple-50 hover:bg-purple-100 active:bg-purple-200 text-purple-700 border border-purple-200'
+              }`}>
+              <Layers size={16} />
+              Create Bundle
+            </button>
+          </div>
+
+          {/* Bulk Add Panel */}
+          {bulkFillOpen && (
+            <div className="mx-4 mb-3 p-4 bg-blue-50 border-2 border-blue-300 rounded-xl print:hidden">
+              <p className="text-sm font-bold text-blue-900 mb-3 flex items-center gap-2">
+                <ListPlus size={15} /> Bulk Add Items to {comp.label ?? comp.id}
+              </p>
+              <div className="space-y-3">
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs font-medium text-blue-800">Select Item</label>
+                  <select
+                    value={bulkFillItem}
+                    onChange={e => setBulkFillItem(e.target.value)}
+                    className="w-full border-2 border-blue-300 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-blue-400 outline-none">
+                    <option value="">— Choose an inventory item —</option>
+                    {getOptions('').map(item => {
+                      const rem = getQty(item.name) - (placedStats[item.name]?.total ?? 0);
+                      return (
+                        <option key={item.name} value={item.name}>
+                          {item.name}  ·  {rem} unit{rem !== 1 ? 's' : ''} available
+                        </option>
+                      );
+                    })}
+                  </select>
+                </div>
+                <div className="flex items-end gap-3">
+                  <div className="flex flex-col gap-1">
+                    <label className="text-xs font-medium text-blue-800">Quantity</label>
+                    <input
+                      type="number" min="1"
+                      value={bulkFillQty}
+                      onChange={e => setBulkFillQty(Math.max(1, parseInt(e.target.value, 10) || 1))}
+                      className="w-24 border-2 border-blue-300 rounded-lg px-3 py-2 text-sm text-center bg-white focus:ring-2 focus:ring-blue-400 outline-none" />
+                  </div>
+                  <button
+                    onClick={() => handleBulkFill(comp.id)}
+                    disabled={!bulkFillItem}
+                    className="flex-1 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 disabled:bg-slate-300 disabled:cursor-not-allowed text-white text-sm font-semibold px-4 py-2 rounded-lg transition-colors touch-manipulation">
+                    Add {bulkFillQty} Slot{bulkFillQty !== 1 ? 's' : ''}
+                  </button>
+                  <button
+                    onClick={() => { setBulkFillOpen(false); setBulkFillItem(''); setBulkFillQty(1); }}
+                    className="text-slate-500 hover:text-slate-700 text-sm px-2 py-2 touch-manipulation">
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="p-4 sm:p-6 grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-8">
+          <div>
+            <div className="lg:sticky lg:top-20 print:static">
+              <ImageCarousel
+                presetImages={comp.images}
+                uploaded={uploadedImages[comp.id] ?? []}
+                compId={comp.id}
+                onUpload={handleUploadImage}
+                onDelete={handleDeleteUploadedImage}
+                featuredImage={featuredImages[comp.id] ?? null}
+                onSetFeatured={(imageRef) => handleSetFeatured(comp.id, imageRef)}
+              />
+            </div>
+          </div>
+
+          <div>
+            {/* Bundle mode active bar */}
+            {bundleMode && (
+              <div className="mb-3 p-4 bg-purple-50 border-2 border-purple-300 rounded-xl print:hidden">
+                <div className="flex items-center justify-between gap-2 mb-3">
+                  <p className="text-sm font-bold text-purple-900 flex items-center gap-2">
+                    <Layers size={15} /> Bundle Mode
+                    {selectedSlots.length > 0
+                      ? <span className="bg-purple-600 text-white text-xs px-2 py-0.5 rounded-full">{selectedSlots.length} slot{selectedSlots.length !== 1 ? 's' : ''} selected</span>
+                      : <span className="text-xs font-normal text-purple-600">— tap checkboxes on filled slots below</span>}
+                  </p>
+                  <button onClick={() => { setBundleMode(false); setSelectedSlots([]); setBundleNamePrompt(false); }}
+                    className="text-purple-400 hover:text-purple-700 touch-manipulation">
+                    <X size={16} />
+                  </button>
+                </div>
+                {bundleNamePrompt ? (
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    <input
+                      autoFocus
+                      placeholder="Bundle name (e.g. Highrise Pack, Extrication Kit…)"
+                      value={bundleNameInput}
+                      onChange={e => setBundleNameInput(e.target.value)}
+                      onKeyDown={e => e.key === 'Enter' && handleCreateBundle(comp.id)}
+                      className="flex-1 border-2 border-purple-300 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-purple-400 outline-none" />
+                    <button
+                      onClick={() => handleCreateBundle(comp.id)}
+                      disabled={!bundleNameInput.trim() || selectedSlots.length === 0}
+                      className="bg-purple-600 hover:bg-purple-700 active:bg-purple-800 disabled:bg-slate-300 disabled:cursor-not-allowed text-white text-sm font-semibold px-4 py-2 rounded-lg transition-colors touch-manipulation">
+                      Save Bundle
+                    </button>
+                    <button onClick={() => { setBundleNamePrompt(false); setBundleNameInput(''); }}
+                      className="text-slate-500 hover:text-slate-700 text-sm px-3 py-2 touch-manipulation">Back</button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setBundleNamePrompt(true)}
+                    disabled={selectedSlots.length === 0}
+                    className="w-full bg-purple-600 hover:bg-purple-700 active:bg-purple-800 disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed text-white text-sm font-semibold py-2 rounded-lg flex items-center justify-center gap-2 transition-colors touch-manipulation">
+                    <Layers size={15} />
+                    {selectedSlots.length === 0 ? 'Select slots below to bundle them' : `Bundle ${selectedSlots.length} Selected Slot${selectedSlots.length !== 1 ? 's' : ''}`}
+                  </button>
+                )}
+              </div>
+            )}
+
+            <div className="bg-white rounded-lg border border-slate-200 shadow-sm">
+              <div className="bg-slate-800 text-white px-4 py-3 font-bold flex items-center gap-2 text-sm rounded-t-lg">
+                <Settings size={15} /> Equipment — {comp.label ?? comp.id}
+              </div>
+              <div className="divide-y divide-slate-100 p-1.5">
+                {slots.map((cur, idx) => {
+                  const options   = getOptions(cur);
+                  const bundle    = slotBundleMap[idx];
+                  const bc        = bundle ? BUNDLE_COLORS[bundle.colorIdx ?? 0] : null;
+                  const isSelected = selectedSlots.includes(idx);
+                  return (
+                    <React.Fragment key={idx}>
+                      <div
+                        className={`p-2 flex items-center gap-2 rounded transition-colors ${!bc ? 'hover:bg-slate-50' : ''}`}
+                        style={bc ? { backgroundColor: bc.bg } : undefined}>
+                        {/* Bundle-mode checkbox (only for filled slots) */}
+                        {bundleMode && cur && (
+                          <button
+                            className="shrink-0 touch-manipulation"
+                            onPointerDown={e => {
+                              e.preventDefault();
+                              setSelectedSlots(prev =>
+                                prev.includes(idx) ? prev.filter(i => i !== idx) : [...prev, idx]
+                              );
+                            }}>
+                            {isSelected
+                              ? <CheckSquare size={16} className="text-purple-600" />
+                              : <Square size={16} className="text-slate-300" />}
+                          </button>
+                        )}
+                        <div className="w-6 h-6 rounded-full bg-slate-100 flex items-center justify-center text-slate-400 font-bold text-[10px] border border-slate-200 shrink-0">
+                          {idx + 1}
+                        </div>
+                        <ComboSlot
+                          options={options}
+                          value={cur}
+                          onChange={val => assign(comp.id, idx, val)}
+                          getQty={getQty}
+                          placedStats={placedStats}
+                        />
+                        {bundle && (
+                          <span className="shrink-0 text-[9px] font-bold px-1.5 py-0.5 rounded-full whitespace-nowrap"
+                            style={{ backgroundColor: bc.border, color: '#fff' }}>
+                            {bundle.name.length > 10 ? bundle.name.slice(0, 9) + '…' : bundle.name}
+                          </span>
+                        )}
+                        <button
+                          onClick={() => clearSlot(comp.id, idx)}
+                          disabled={!cur}
+                          className={`p-1 rounded transition-colors shrink-0 ${
+                            cur ? 'text-red-500 hover:bg-red-50' : 'text-slate-200 cursor-not-allowed'
+                          }`}
+                          title="Clear slot">
+                          <Trash2 size={15} />
+                        </button>
+                      </div>
+                      {cur && effectiveDimensions[cur] && (
+                        <div className="ml-9 -mt-1 mb-1 flex items-center gap-1 text-[10px] text-indigo-600 bg-indigo-50 border border-indigo-100 rounded px-2 py-0.5 w-fit">
+                          <Ruler size={9} className="shrink-0" />
+                          <span className="font-mono">{effectiveDimensions[cur]}</span>
+                        </div>
+                      )}
+                    </React.Fragment>
+                  );
+                })}
+              </div>
+              {/* Add / Remove row controls */}
+              <div className="px-2 pb-2 pt-1 flex gap-2 print:hidden">
+                <button
+                  onClick={() => addRow(comp.id)}
+                  className="flex-1 flex items-center justify-center gap-1.5 text-xs text-slate-400 hover:text-green-700 hover:bg-green-50 border border-dashed border-slate-200 hover:border-green-300 rounded-lg py-2 transition-colors touch-manipulation">
+                  <Plus size={12} /> Add Row
+                </button>
+                {slots.length > SLOTS_PER_COMPARTMENT && slots[slots.length - 1] === '' && (
+                  <button
+                    onClick={() => removeLastEmptyRow(comp.id)}
+                    className="flex items-center justify-center gap-1.5 text-xs text-slate-400 hover:text-red-600 hover:bg-red-50 border border-dashed border-slate-200 hover:border-red-300 rounded-lg px-3 py-2 transition-colors touch-manipulation">
+                    <X size={12} /> Remove
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Existing bundles — collapsible */}
+            {compBundles.length > 0 && (
+              <div className="mt-3 bg-slate-50 border border-slate-200 rounded-lg overflow-hidden print:hidden">
+                <div className="bg-slate-100 px-3 py-2 text-xs font-bold text-slate-600 flex items-center gap-1.5">
+                  <Layers size={11} /> Bundles ({compBundles.length})
+                </div>
+                <div className="divide-y divide-slate-100">
+                  {compBundles.map(b => {
+                    const c = BUNDLE_COLORS[b.colorIdx ?? 0];
+                    const isExpanded = expandedBundles[b.id] === true;
+                    return (
+                      <div key={b.id} style={{ backgroundColor: c.bg }}>
+                        {/* Bundle header row */}
+                        <div className="px-3 py-2 flex items-center justify-between gap-2">
+                          <button
+                            onClick={() => setExpandedBundles(prev => ({ ...prev, [b.id]: !prev[b.id] }))}
+                            className="flex items-center gap-2 min-w-0 flex-1 text-left touch-manipulation">
+                            <div className="w-3 h-3 rounded-full shrink-0 border-2"
+                              style={{ backgroundColor: c.border, borderColor: c.border }} />
+                            <span className="text-xs font-medium truncate" style={{ color: c.text }}>{b.name}</span>
+                            <span className="text-[10px] text-slate-400 shrink-0">
+                              ({b.slotIndices.length} item{b.slotIndices.length !== 1 ? 's' : ''})
+                            </span>
+                            <ChevronDown
+                              size={12}
+                              className="shrink-0 transition-transform duration-200"
+                              style={{
+                                color: c.text,
+                                transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)',
+                              }}
+                            />
+                          </button>
+                          <button onClick={() => handleDeleteBundle(comp.id, b.id)}
+                            className="shrink-0 text-slate-400 hover:text-red-500 p-1 rounded transition-colors touch-manipulation"
+                            title="Remove bundle">
+                            <X size={12} />
+                          </button>
+                        </div>
+                        {/* Expanded items list */}
+                        {isExpanded && (
+                          <div className="mx-2 mb-2 space-y-px rounded overflow-hidden border"
+                            style={{ borderColor: c.border }}>
+                            {b.slotIndices.map((si, i) => {
+                              const item = (allocations[comp.id] ?? [])[si] || '(empty)';
+                              return (
+                                <div key={si}
+                                  className={`flex items-center gap-2 px-2 py-1.5 text-xs ${i > 0 ? 'border-t' : ''}`}
+                                  style={{ borderColor: c.border, backgroundColor: c.bg }}>
+                                  <span className="font-mono text-[10px] shrink-0 w-5 text-right font-bold"
+                                    style={{ color: c.border }}>
+                                    {si + 1}
+                                  </span>
+                                  <span className="w-px h-3 shrink-0 opacity-40"
+                                    style={{ backgroundColor: c.border }} />
+                                  <span className="truncate flex-1" style={{ color: c.text }}>{item}</span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {filled > 0 && (
+              <div className="mt-3 bg-slate-50 border border-slate-200 rounded-lg p-3">
+                <p className="text-xs font-bold text-slate-600 mb-2">Items in this compartment:</p>
+                <div className="space-y-1">
+                  {Object.entries(
+                    slots.filter(Boolean).reduce((acc, t) => { acc[t] = (acc[t] ?? 0) + 1; return acc; }, {})
+                  ).map(([name, count]) => {
+                    const qty            = getQty(name);
+                    const totalPlacedFor = placedStats[name]?.total ?? 0;
+                    return (
+                      <div key={name} className="flex items-center justify-between text-xs">
+                        <span className="text-slate-700 truncate flex-1 pr-2">{name}</span>
+                        <span className="text-slate-500 shrink-0">
+                          {count} here · {totalPlacedFor}/{qty} total placed
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            <div className="mt-3 bg-blue-50 border border-blue-200 rounded-lg p-3 flex gap-2 text-blue-800 text-xs print:hidden">
+              <AlertCircle size={14} className="shrink-0 text-blue-500 mt-0.5" />
+              <p>
+                Dropdowns show remaining quantity in brackets. Use <strong>Bulk Fill</strong> to fill multiple slots at once.
+                Use <strong>Bundles</strong> to visually group related equipment. Changes sync to all team members.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  // ── Render ────────────────────────────────────────────────────────────────
+  const activeOv   = OVERVIEWS.find(o => o.id === activeTab);
+  const activeComp = COMPARTMENTS.find(c => c.id === activeTab);
+
+  return (
+    <div className="flex h-screen w-full bg-slate-100 overflow-hidden">
+      {/* Mobile backdrop overlay — only rendered when open so it never blocks touches */}
+      {sidebarOpen && (
+        <div
+          className="fixed inset-0 bg-black/50 z-40 lg:hidden"
+          onClick={() => setSidebarOpen(false)}
+          aria-hidden="true"
+        />
+      )}
+
+      {/* Sidebar — fixed overlay on mobile, static on desktop.
+          CRITICAL: pointer-events-none when closed so iOS touch events reach the main content. */}
+      <div className={`
+        fixed lg:static inset-y-0 left-0 z-50 flex-shrink-0
+        transition-transform duration-300 ease-in-out
+        lg:transform-none lg:translate-x-0 lg:pointer-events-auto
+        ${sidebarOpen
+          ? 'translate-x-0 pointer-events-auto'
+          : '-translate-x-full pointer-events-none'}
+      `}>
+        <Sidebar />
+      </div>
+
+      <main className="flex-1 overflow-hidden flex flex-col min-w-0">
+        {/* Mobile top bar */}
+        <div className="lg:hidden flex items-center justify-between bg-slate-900 px-4 py-3 shrink-0 print:hidden shadow-md">
+          <div className="flex items-center gap-2.5">
+            <div className="bg-red-600 p-1.5 rounded-md text-white shrink-0"><Settings size={15} /></div>
+            <div>
+              <p className="font-bold text-white text-sm leading-tight">L1 Mid-Mount</p>
+              <p className="text-[10px] text-slate-400">Compartment Builder</p>
+            </div>
+          </div>
+          <button
+            onClick={() => setSidebarOpen(true)}
+            className="text-white p-2 rounded-md hover:bg-slate-700 active:bg-slate-600 transition-colors touch-manipulation"
+            aria-label="Open navigation menu">
+            <Menu size={22} />
+          </button>
+        </div>
+
+        {activeTab === 'inventory' && renderInventory()}
+        {activeOv   && renderOverview(activeOv)}
+        {activeComp && renderCompartment(activeComp)}
+      </main>
+    </div>
+  );
+}
+
+// ─── Image Carousel ───────────────────────────────────────────────────────────
+function ImageCarousel({ presetImages, uploaded, compId, onUpload, onDelete, featuredImage, onSetFeatured, onGenerateAI }) {
+  const [idx, setIdx]             = useState(0);
+  const [imgErr, setImgErr]       = useState(false);
+  const [aiText, setAiText]       = useState('');
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiError, setAiError]     = useState('');
+  const prevUploadedLen = useRef(uploaded.length);
+  const pendingNav      = useRef(false);
+
+  const all = [
+    ...presetImages,
+    ...(uploaded ?? []).map((u, i) => ({ src: u.dataUrl, title: u.title || u.fileName, isUploaded: true, uploadIdx: i, uid: u.uid })),
+  ];
+
+  // Reset state when switching compartments; navigate to featured image if set
+  useEffect(() => {
+    setImgErr(false);
+    setAiText('');
+    setAiError('');
+    prevUploadedLen.current = uploaded.length;
+    pendingNav.current = false;
+    if (featuredImage) {
+      if (featuredImage.kind === 'preset') {
+        const fi = presetImages.findIndex(p => p.src === featuredImage.src);
+        setIdx(fi >= 0 ? fi : 0);
+      } else if (featuredImage.kind === 'uploaded') {
+        const fi = (uploaded ?? []).findIndex(u => u.uid === featuredImage.uid);
+        setIdx(fi >= 0 ? presetImages.length + fi : 0);
+      } else {
+        setIdx(0);
+      }
+    } else {
+      setIdx(0);
+    }
+  }, [compId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Navigate to newly added image (upload or AI generation)
+  useEffect(() => {
+    if (pendingNav.current && uploaded.length > prevUploadedLen.current) {
+      pendingNav.current = false;
+      setIdx(presetImages.length + uploaded.length - 1);
+      setImgErr(false);
+    }
+    prevUploadedLen.current = uploaded.length;
+  });
+
+  const cur  = all[Math.min(idx, all.length - 1)];
+  const isFeatured = featuredImage != null && (
+    (featuredImage.kind === 'preset' && cur?.src === featuredImage.src) ||
+    (featuredImage.kind === 'uploaded' && cur?.uid === featuredImage.uid)
+  );
+  const goTo = (i) => { setIdx(i); setImgErr(false); };
+  const prev = () => goTo((idx - 1 + all.length) % all.length);
+  const next = () => goTo((idx + 1) % all.length);
+
+  const handleFile = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = async (ev) => {
+      pendingNav.current = true;
+      const compressed = await compressImage(ev.target.result);
+      onUpload(compId, { dataUrl: compressed, title: file.name.replace(/\.[^/.]+$/, ''), fileName: file.name });
+    };
+    reader.readAsDataURL(file);
+    e.target.value = '';
+  };
+
+  const handleGenerateAI = async () => {
+    setAiLoading(true);
+    setAiError('');
+    pendingNav.current = true;
+    try {
+      await onGenerateAI(aiText);
+      setAiText('');
+    } catch (err) {
+      pendingNav.current = false;
+      setAiError(err.message || 'Generation failed. Please try again.');
+    } finally {
+      setAiLoading(false);
+    }
+  };
+
+  return (
+    <div className="w-full">
+      <div className="w-full bg-slate-100 rounded-lg border border-slate-300 overflow-hidden print-image-container">
+        <div className="relative flex items-center justify-center min-h-[260px]">
+          {!imgErr && cur ? (
+            <img src={cur.src} alt={cur.title || 'Compartment'} key={cur.src}
+              className="max-w-full max-h-[500px] object-contain p-2"
+              onError={() => setImgErr(true)} />
+          ) : (
+            <div className="flex flex-col items-center text-slate-400 p-8 text-center">
+              <ImageIcon size={48} className="mb-3 opacity-40" />
+              <p className="text-xs text-slate-500">Image not available</p>
+            </div>
+          )}
+          {all.length > 1 && (
+            <>
+              <button onClick={prev}
+                className="absolute left-2 top-1/2 -translate-y-1/2 bg-black/30 hover:bg-black/60 active:bg-black/80 text-white rounded-full p-2 transition-colors print:hidden touch-manipulation">
+                <ChevronLeft size={18} />
+              </button>
+              <button onClick={next}
+                className="absolute right-2 top-1/2 -translate-y-1/2 bg-black/30 hover:bg-black/60 active:bg-black/80 text-white rounded-full p-2 transition-colors print:hidden touch-manipulation">
+                <ChevronRight size={18} />
+              </button>
+            </>
+          )}
+          {aiLoading && (
+            <div className="absolute inset-0 bg-black/60 flex flex-col items-center justify-center z-10 rounded-lg">
+              <Loader2 size={36} className="text-white animate-spin mb-3" />
+              <p className="text-white text-sm font-semibold">Generating AI rendering…</p>
+              <p className="text-white/60 text-xs mt-1">This may take up to 60 seconds</p>
+            </div>
+          )}
+        </div>
+
+        {(all.length > 1 || cur?.title) && (
+          <div className="py-2 px-3 flex items-center justify-between bg-white border-t border-slate-200 gap-2">
+            <div className="flex items-center gap-1.5 min-w-0">
+              <span className="text-xs font-medium text-slate-600 truncate">{cur?.title || ''}</span>
+              {!cur?.isUploaded && (
+                <span className="shrink-0 flex items-center gap-0.5 text-[9px] text-slate-400 border border-slate-200 rounded px-1 py-0.5 print:hidden">
+                  <Lock size={8} /> locked
+                </span>
+              )}
+              {isFeatured && (
+                <span className="shrink-0 flex items-center gap-0.5 text-[9px] text-amber-600 bg-amber-50 border border-amber-200 rounded px-1 py-0.5">
+                  <Star size={8} fill="currentColor" /> featured
+                </span>
+              )}
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              {all.length > 1 && (
+                <div className="flex items-center gap-1.5">
+                  {all.map((_, i) => (
+                    <button key={i} onClick={() => goTo(i)}
+                      className={`w-2.5 h-2.5 rounded-full transition-colors touch-manipulation ${i === idx ? 'bg-red-500' : 'bg-slate-300 hover:bg-slate-400 active:bg-slate-500'}`}
+                    />
+                  ))}
+                </div>
+              )}
+              {onSetFeatured && cur && (
+                <button
+                  onClick={() => {
+                    const imageRef = cur.isUploaded
+                      ? { kind: 'uploaded', uid: cur.uid }
+                      : { kind: 'preset', src: cur.src };
+                    onSetFeatured(imageRef);
+                  }}
+                  title={isFeatured ? 'Remove as featured image' : 'Set as featured — loads first when opening this compartment'}
+                  className={`p-1.5 rounded transition-colors print:hidden touch-manipulation ${isFeatured ? 'text-amber-400 hover:text-slate-300' : 'text-slate-300 hover:text-amber-400 active:text-amber-500'}`}
+                >
+                  <Star size={15} fill={isFeatured ? 'currentColor' : 'none'} />
+                </button>
+              )}
+              {cur?.isUploaded && (
+                <button onClick={() => { onDelete(compId, cur.uploadIdx); goTo(Math.max(0, idx - 1)); }}
+                  className="p-1.5 rounded text-slate-400 hover:text-red-500 active:text-red-600 transition-colors print:hidden touch-manipulation" title="Remove this image">
+                  <X size={14} />
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="mt-2 print:hidden">
+        <label className="inline-flex items-center gap-1.5 text-xs text-slate-500 hover:text-red-600 active:text-red-700 cursor-pointer transition-colors bg-slate-50 hover:bg-red-50 border border-slate-200 hover:border-red-300 rounded-lg px-3 py-2 touch-manipulation select-none">
+          <Upload size={13} />
+          <span className="font-medium">Upload rendering or photo</span>
+          <input type="file" accept="image/*" className="hidden" onChange={handleFile} />
+        </label>
+      </div>
+
+      {onGenerateAI && (
+        <div className="mt-3 bg-gradient-to-br from-indigo-50 to-slate-50 border-2 border-indigo-200 rounded-xl p-4 shadow-sm print:hidden">
+          <div className="flex items-center gap-3 mb-3">
+            <div className="bg-indigo-600 text-white p-2 rounded-lg shrink-0">
+              <Sparkles size={18} />
+            </div>
+            <div>
+              <p className="text-sm font-bold text-indigo-900 leading-tight">Generate AI Rendering</p>
+              <p className="text-[10px] text-indigo-400 mt-0.5">Powered by Cloudflare Workers AI · Llama + Flux</p>
+            </div>
+          </div>
+
+          <p className="text-xs text-slate-600 mb-3 leading-relaxed">
+            The AI generates a photorealistic rendering of <span className="font-semibold text-slate-800">this exact compartment</span> with
+            your currently assigned tools and real dimensional specs. Use the field below to send
+            additional instructions directly to the AI — tool placement, shelf configuration, mounting style, or any other details.
+          </p>
+
+          <label className="block text-xs font-semibold text-indigo-800 mb-1.5">
+            Additional instructions for the AI <span className="font-normal text-indigo-400">(optional)</span>
+          </label>
+          <textarea
+            value={aiText}
+            onChange={e => setAiText(e.target.value)}
+            placeholder={`Describe specific details you want included in the rendering — e.g.\n• "Mount the Holmatro V-Struts vertically on the right wall"\n• "Show the chainsaw on a saw mount bracket, blade facing outward"\n• "Add a pull-out tray at the bottom with the hose rolled flat"\n• "Remove the fixed shelf and use the full open bay"\nLeave blank to use standard AI configuration.`}
+            rows={5}
+            disabled={aiLoading}
+            className="w-full text-xs border-2 border-indigo-200 rounded-lg px-3 py-2.5 resize-none focus:ring-2 focus:ring-indigo-400 focus:border-indigo-500 outline-none bg-white text-slate-700 placeholder-slate-400 leading-relaxed disabled:opacity-60"
+          />
+
+          {aiError && (
+            <div className="mt-2 flex items-start gap-1.5 text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+              <AlertCircle size={13} className="shrink-0 mt-0.5" />
+              <span>{aiError}</span>
+            </div>
+          )}
+
+          <button
+            onClick={handleGenerateAI}
+            disabled={aiLoading}
+            className="mt-3 w-full flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 disabled:bg-slate-300 disabled:cursor-not-allowed text-white text-sm font-bold px-4 py-3 rounded-lg transition-colors shadow-sm tracking-wide"
+          >
+            {aiLoading
+              ? <><Loader2 size={16} className="animate-spin" /> Generating — up to 60 seconds…</>
+              : <><Sparkles size={16} /> Generate AI Rendering</>}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function compressImage(dataUrl, maxWidth = 1400, quality = 0.82) {
+  return new Promise(resolve => {
+    const img = new Image();
+    img.onload = () => {
+      let { width, height } = img;
+      if (width > maxWidth) { height = Math.round((height * maxWidth) / width); width = maxWidth; }
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+      resolve(canvas.toDataURL('image/jpeg', quality));
+    };
+    img.onerror = () => resolve(dataUrl);
+    img.src = dataUrl;
+  });
+}
+
+// ─── Searchable Combo Slot ────────────────────────────────────────────────────
+function ComboSlot({ options, value, onChange, getQty, placedStats }) {
+  const [open, setOpen]       = useState(false);
+  const [query, setQuery]     = useState('');
+  const [hiIdx, setHiIdx]     = useState(-1);
+  const [dropPos, setDropPos] = useState({ top: 0, left: 0, width: 0 });
+  const containerRef = useRef(null);
+  const inputRef     = useRef(null);
+
+  const filtered = query.trim()
+    ? options.filter(item => item.name.toLowerCase().includes(query.toLowerCase()))
+    : options;
+
+  useEffect(() => {
+    if (!open) return;
+    const closeOnPointer = (e) => {
+      if (containerRef.current && !containerRef.current.contains(e.target)) {
+        setOpen(false); setQuery(''); setHiIdx(-1);
+      }
+    };
+    // Reposition (don't close) when the page scrolls or resizes — keeps the
+    // fixed-position dropdown anchored to its trigger button. Closing on scroll
+    // breaks on iOS/iPad because the on-screen keyboard popping up triggers a
+    // window scroll event, which would dismiss the dropdown before the user
+    // can tap an option.
+    const reposition = () => {
+      if (!containerRef.current) return;
+      const rect = containerRef.current.getBoundingClientRect();
+      setDropPos({ top: rect.bottom, left: rect.left, width: rect.width });
+    };
+    document.addEventListener('pointerdown', closeOnPointer);
+    window.addEventListener('scroll', reposition, true);
+    window.addEventListener('resize', reposition);
+    return () => {
+      document.removeEventListener('pointerdown', closeOnPointer);
+      window.removeEventListener('scroll', reposition, true);
+      window.removeEventListener('resize', reposition);
+    };
+  }, [open]);
+
+  const openDropdown = () => {
+    if (containerRef.current) {
+      const rect = containerRef.current.getBoundingClientRect();
+      setDropPos({ top: rect.bottom, left: rect.left, width: rect.width });
+    }
+    setOpen(true); setQuery(''); setHiIdx(-1);
+    // Auto-focus search input on devices with a physical keyboard. Skip on
+    // touch-only devices because focusing a text input pops the on-screen
+    // keyboard, which is jarring when the user just wants to scroll the list.
+    const isTouchOnly = typeof window !== 'undefined'
+      && (window.matchMedia?.('(hover: none) and (pointer: coarse)').matches ?? false);
+    if (!isTouchOnly) {
+      setTimeout(() => inputRef.current?.focus(), 0);
+    }
+  };
+
+  const select = (name) => { onChange(name); setOpen(false); setQuery(''); setHiIdx(-1); };
+
+  const handleKey = (e) => {
+    if (e.key === 'ArrowDown')  { e.preventDefault(); setHiIdx(i => Math.min(i + 1, filtered.length - 1)); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); setHiIdx(i => Math.max(i - 1, -1)); }
+    else if (e.key === 'Enter') {
+      e.preventDefault();
+      if (hiIdx === -1) select('');
+      else if (filtered[hiIdx]) select(filtered[hiIdx].name);
+    }
+    else if (e.key === 'Escape') { setOpen(false); setQuery(''); setHiIdx(-1); }
+  };
+
+  return (
+    <div ref={containerRef} className="relative flex-1 min-w-0">
+      <button
+        onClick={openDropdown}
+        className={`w-full px-2 py-2 border rounded-md text-xs text-left truncate focus:ring-2 focus:ring-red-500 focus:border-red-500 outline-none touch-manipulation ${
+          value ? 'border-green-300 bg-green-50 text-slate-800 font-medium' : 'border-slate-300 bg-white text-slate-400'
+        }`}
+      >
+        {value || '— Empty Slot —'}
+      </button>
+
+      {open && (
+        <div
+          className="fixed z-[9999] shadow-xl"
+          style={{ top: dropPos.top, left: dropPos.left, width: dropPos.width }}>
+          <input
+            ref={inputRef}
+            value={query}
+            onChange={e => { setQuery(e.target.value); setHiIdx(-1); }}
+            onKeyDown={handleKey}
+            placeholder="Type to search tools…"
+            className="w-full p-2 border-2 border-red-400 rounded-t-md text-xs outline-none bg-white"
+          />
+          <div className="bg-white border border-t-0 border-slate-300 rounded-b-md max-h-64 overflow-y-auto overscroll-contain">
+            <button
+              onPointerDown={e => { e.preventDefault(); select(''); }}
+              className={`w-full text-left px-3 py-2.5 text-xs transition-colors touch-manipulation ${
+                hiIdx === -1 ? 'bg-red-50 text-red-700' : 'text-slate-400 hover:bg-slate-50 active:bg-slate-100'
+              }`}
+            >— Empty Slot —</button>
+            {filtered.map((item, i) => {
+              const placed    = placedStats[item.name]?.total ?? 0;
+              const qty       = getQty(item.name);
+              const remaining = qty - placed + (value === item.name ? 1 : 0);
+              return (
+                <button key={item.name}
+                  onPointerDown={e => { e.preventDefault(); select(item.name); }}
+                  className={`w-full text-left px-3 py-2.5 text-xs flex items-center justify-between gap-2 transition-colors touch-manipulation ${
+                    i === hiIdx ? 'bg-red-50 text-red-700' : 'hover:bg-slate-50 active:bg-slate-100 text-slate-700'
+                  }`}
+                >
+                  <span className="truncate flex-1">{item.name}</span>
+                  <span className={`shrink-0 font-mono text-[10px] ${remaining === 0 ? 'text-red-400' : 'text-slate-400'}`}>
+                    [{remaining}/{qty}]
+                  </span>
+                </button>
+              );
+            })}
+            {filtered.length === 0 && (
+              <div className="px-3 py-3 text-xs text-slate-400 text-center italic">No matching tools</div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Add Custom Tool Form ─────────────────────────────────────────────────────
+function AddToolForm({ effectiveInventory, onAdd }) {
+  const [name, setName]   = useState('');
+  const [qty, setQty]     = useState(1);
+  const [dims, setDims]   = useState('');
+
+  const handleSubmit = () => {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    if (effectiveInventory.some(i => i.name.toLowerCase() === trimmed.toLowerCase())) {
+      alert(`"${trimmed}" already exists in the inventory.`);
+      return;
+    }
+    onAdd({ name: trimmed, qty: Math.max(1, qty), dimensions: dims.trim() });
+    setName('');
+    setQty(1);
+    setDims('');
+  };
+
+  return (
+    <div className="mt-6 bg-slate-50 border border-dashed border-slate-300 rounded-lg p-4 print:hidden">
+      <h3 className="text-sm font-bold text-slate-700 mb-3 flex items-center gap-2">
+        <Plus size={14} className="text-red-600" /> Add Custom Tool to Inventory
+      </h3>
+      <div className="flex flex-col sm:flex-row flex-wrap gap-3">
+        <input
+          type="text"
+          placeholder="Tool name *"
+          value={name}
+          onChange={e => setName(e.target.value)}
+          onKeyDown={e => e.key === 'Enter' && handleSubmit()}
+          className="flex-1 min-w-0 border border-slate-300 rounded px-3 py-2.5 text-sm focus:ring-2 focus:ring-red-500 focus:border-red-500 outline-none bg-white"
+        />
+        <input
+          type="number"
+          placeholder="Qty"
+          min="1"
+          value={qty}
+          onChange={e => setQty(Math.max(1, parseInt(e.target.value, 10) || 1))}
+          className="w-full sm:w-20 border border-slate-300 rounded px-3 py-2.5 text-sm text-center focus:ring-2 focus:ring-red-500 focus:border-red-500 outline-none bg-white"
+        />
+        <input
+          type="text"
+          placeholder='Dimensions — optional (e.g. 42.5 × 5.9 × 8.3 in)'
+          value={dims}
+          onChange={e => setDims(e.target.value)}
+          onKeyDown={e => e.key === 'Enter' && handleSubmit()}
+          className="flex-1 min-w-0 border border-slate-300 rounded px-3 py-2.5 text-sm focus:ring-2 focus:ring-red-500 focus:border-red-500 outline-none bg-white"
+        />
+        <button
+          onClick={handleSubmit}
+          disabled={!name.trim()}
+          className="w-full sm:w-auto bg-red-600 hover:bg-red-700 active:bg-red-800 disabled:bg-slate-300 disabled:cursor-not-allowed text-white px-4 py-2.5 rounded text-sm font-medium transition-colors flex items-center justify-center gap-1.5 touch-manipulation"
+        >
+          <Plus size={14} /> Add Tool
+        </button>
+      </div>
+      <p className="text-xs text-slate-500 mt-2">
+        Custom tools are tagged <span className="text-amber-600 font-bold">custom</span> in the table, appear in all compartment dropdowns immediately, and sync to all team members.
+        Use the <X size={10} className="inline" /> button to remove a custom tool.
+      </p>
+    </div>
+  );
+}
+
+// ─── Small shared components ──────────────────────────────────────────────────
+function SideBtn({ active, onClick, children }) {
+  return (
+    <button onClick={onClick}
+      className={`w-full text-left px-3 py-1.5 rounded flex items-center gap-2 text-xs transition-colors ${
+        active ? 'bg-red-600 text-white font-medium' : 'hover:bg-slate-800 text-slate-300'
+      }`}>
+      {children}
+    </button>
+  );
+}
+
+function CompBtn({ comp, active, count, onClick }) {
+  return (
+    <button onClick={onClick}
+      className={`w-full text-left px-3 py-1.5 rounded flex items-center justify-between text-xs transition-colors ${
+        active ? 'bg-slate-700 text-white font-medium' : 'hover:bg-slate-800 text-slate-300'
+      }`}>
+      <div className="flex items-center gap-1.5">
+        <ChevronRight size={12} className={active ? 'text-red-400' : 'text-slate-500'} />
+        {comp.label ?? comp.id}
+      </div>
+      {count > 0 && (
+        <span className="bg-slate-600 text-white text-[9px] px-1.5 py-0.5 rounded-full">{count}</span>
+      )}
+    </button>
+  );
+}

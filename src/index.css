@@ -1,0 +1,111 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html, body, #root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  /* Prevent iOS Safari elastic/bounce scrolling at the document level */
+  overscroll-behavior: none;
+}
+
+/* Ensure all scrollable sub-containers use momentum scrolling on iOS */
+.overflow-y-auto {
+  -webkit-overflow-scrolling: touch;
+}
+
+/* ─── Print Styles ─────────────────────────────────────────────────────────── */
+@media print {
+  @page {
+    size: letter landscape;
+    margin: 0.5in;
+  }
+
+  html, body, #root {
+    height: auto !important;
+    overflow: visible !important;
+  }
+
+  /* Root flex container: allow natural height */
+  .flex.h-screen {
+    height: auto !important;
+    overflow: visible !important;
+  }
+
+  /* Sidebar: hidden on print */
+  #sidebar {
+    display: none !important;
+  }
+
+  /* Main content: full width, no clipping */
+  main {
+    overflow: visible !important;
+    height: auto !important;
+    width: 100% !important;
+    flex: 1 !important;
+  }
+
+  /* All overflow-hidden / overflow-y-auto containers become visible */
+  .overflow-hidden,
+  .overflow-y-auto {
+    overflow: visible !important;
+    height: auto !important;
+    max-height: none !important;
+  }
+
+  /* Sticky headers become static */
+  .sticky {
+    position: static !important;
+  }
+
+  /* Limit image height so it fits on one landscape page */
+  .print-image-container img {
+    max-height: 3.5in !important;
+    object-fit: contain !important;
+  }
+
+  /* Ensure min-height doesn't blow out the page */
+  .min-h-\[260px\] {
+    min-height: 0 !important;
+  }
+
+  /* Table: repeat headers on each page, avoid row breaks */
+  thead {
+    display: table-header-group;
+  }
+  tr {
+    page-break-inside: avoid;
+  }
+
+  /* Hide interactive / non-print elements */
+  button,
+  input[type="number"],
+  .print\:hidden {
+    display: none !important;
+  }
+
+  /* Show print-only quantity as plain text — handled by React rendering static text */
+
+  /* Compartment grid: 2 columns on landscape letter */
+  .xl\:grid-cols-3 {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  /* Remove shadows and decorative borders that waste ink */
+  .shadow-sm {
+    box-shadow: none !important;
+  }
+
+  /* Progress bar: hide (not meaningful on paper) */
+  .rounded-full.h-2,
+  .rounded-full.h-1\.5 {
+    display: none !important;
+  }
+
+  /* Page break before major sections when printing multiple compartments */
+  .print-page-break {
+    page-break-before: always;
+  }
+}
