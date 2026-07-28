@@ -11,6 +11,34 @@ html, body, #root {
   overscroll-behavior: none;
 }
 
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+.touch-target {
+  min-width: 44px;
+  min-height: 44px;
+}
+
+:focus-visible {
+  outline: 3px solid #ef4444;
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
 /* Ensure all scrollable sub-containers use momentum scrolling on iOS */
 .overflow-y-auto {
   -webkit-overflow-scrolling: touch;

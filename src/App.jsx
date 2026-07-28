@@ -1,12 +1,14 @@
-import React, { useState, useMemo, useEffect, useRef } from 'react';
+import React, { useState, useMemo, useEffect, useId, useRef } from 'react';
 import {
   Settings, LayoutGrid, CheckCircle, Trash2, ChevronRight, ChevronLeft, ChevronDown,
   AlertCircle, RotateCcw, Printer, Package, Image as ImageIcon,
   Download, Wifi, WifiOff, Ruler, Plus, X, Upload, Sparkles, Loader2,
   Star, Lock, Menu, Pencil, Save, Layers, CheckSquare, Square, ListPlus,
 } from 'lucide-react';
+import { calculateDropdownPosition } from './dropdown-position.js';
 
 const WORKER_URL = 'https://l1-state-sync.pdarleyjr.workers.dev';
+const BUILD_VERSION = import.meta.env.VITE_BUILD_SHA || 'local';
 
 // ─── Master inventory from L1 Mid-Mount Inventory Checklist (Excel) ───────────
 // qty = default total required quantity; users can edit in Inventory Status
@@ -242,27 +244,27 @@ const CONSOLIDATION_RENAMES = {
 };
 
 const COMPARTMENTS = [
-  { id: 'CabRearZone', label: 'Rear Zone', side: 'Cab', images: [{ src: '/images/CabRearZone.png', title: 'Compartment Photo' }] },
-  { id: 'LS1', side: 'Left',  images: [{ src: '/images/LS1.png', title: 'Compartment Photo' }] },
+  { id: 'CabRearZone', label: 'Rear Zone', side: 'Cab', images: [{ src: '/images/CabRearZone.webp', title: 'Compartment Photo' }] },
+  { id: 'LS1', side: 'Left',  images: [{ src: '/images/LS1.webp', title: 'Compartment Photo' }] },
   { id: 'LS2', side: 'Left',  images: [
-    { src: '/images/LS2.png',            title: 'Compartment Photo'    },
-    { src: '/images/LS2_rendering.png',  title: 'Rendering with Tools' },
+    { src: '/images/LS2.webp',            title: 'Compartment Photo'    },
+    { src: '/images/LS2_rendering.webp',  title: 'Rendering with Tools' },
   ]},
-  { id: 'LS3', side: 'Left',  images: [{ src: '/images/LS3.png', title: 'Compartment Photo' }] },
-  { id: 'LS4', side: 'Left',  images: [{ src: '/images/LS4.png', title: 'Compartment Photo' }] },
-  { id: 'RS1', side: 'Right', images: [{ src: '/images/RS1.png', title: 'Compartment Photo' }] },
-  { id: 'RS2', side: 'Right', images: [{ src: '/images/RS2.png', title: 'Compartment Photo' }] },
-  { id: 'RS3', side: 'Right', images: [{ src: '/images/RS3.png', title: 'Compartment Photo' }] },
-  { id: 'RS4', side: 'Right', images: [{ src: '/images/RS4.png', title: 'Compartment Photo' }] },
-  { id: 'RS5', side: 'Right', images: [{ src: '/images/RS5.png', title: 'Compartment Photo' }] },
-  { id: 'RR1', label: 'Rear', side: 'Rear',  images: [{ src: '/images/RR1.png', title: 'Compartment Photo' }] },
+  { id: 'LS3', side: 'Left',  images: [{ src: '/images/LS3.webp', title: 'Compartment Photo' }] },
+  { id: 'LS4', side: 'Left',  images: [{ src: '/images/LS4.webp', title: 'Compartment Photo' }] },
+  { id: 'RS1', side: 'Right', images: [{ src: '/images/RS1.webp', title: 'Compartment Photo' }] },
+  { id: 'RS2', side: 'Right', images: [{ src: '/images/RS2.webp', title: 'Compartment Photo' }] },
+  { id: 'RS3', side: 'Right', images: [{ src: '/images/RS3.webp', title: 'Compartment Photo' }] },
+  { id: 'RS4', side: 'Right', images: [{ src: '/images/RS4.webp', title: 'Compartment Photo' }] },
+  { id: 'RS5', side: 'Right', images: [{ src: '/images/RS5.webp', title: 'Compartment Photo' }] },
+  { id: 'RR1', label: 'Rear', side: 'Rear',  images: [{ src: '/images/RR1.webp', title: 'Compartment Photo' }] },
 ];
 
 const OVERVIEWS = [
-  { id: 'CabOverview',   label: 'Cab Overview',        side: 'Cab',   image: '/images/CAB_Overview.png'       },
-  { id: 'LeftOverview',  label: 'Left Side Overview',  side: 'Left',  image: '/images/LeftSide_Overview.png'  },
-  { id: 'RightOverview', label: 'Right Side Overview', side: 'Right', image: '/images/RightSide_Overview.png' },
-  { id: 'RearOverview',  label: 'Rear Overview',       side: 'Rear',  image: '/images/Rear_Overview.png'      },
+  { id: 'CabOverview',   label: 'Cab Overview',        side: 'Cab',   image: '/images/CAB_Overview.webp'       },
+  { id: 'LeftOverview',  label: 'Left Side Overview',  side: 'Left',  image: '/images/LeftSide_Overview.webp'  },
+  { id: 'RightOverview', label: 'Right Side Overview', side: 'Right', image: '/images/RightSide_Overview.webp' },
+  { id: 'RearOverview',  label: 'Rear Overview',       side: 'Rear',  image: '/images/Rear_Overview.webp'      },
 ];
 
 // Stable display-name lookup: falls back to raw id for compartments without a label
@@ -364,7 +366,7 @@ function CompartmentImage({ src, alt }) {
   return (
     <div className="w-full bg-slate-100 rounded-lg border border-slate-300 flex items-center justify-center overflow-hidden min-h-[260px] print-image-container">
       {!err ? (
-        <img src={src} alt={alt}
+        <img src={src} alt={alt} loading="eager" fetchpriority="high" decoding="async"
           className="max-w-full max-h-[500px] object-contain p-2"
           onError={() => setErr(true)} />
       ) : (
@@ -405,7 +407,10 @@ export default function App() {
     } catch { return {}; }
   });
   const [syncStatus, setSyncStatus]   = useState('connecting');
+  const [storageError, setStorageError] = useState(false);
   const [pullDone, setPullDone]       = useState(false);
+  const [stateSyncReady, setStateSyncReady] = useState(false);
+  const [imageSyncReady, setImageSyncReady] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [removedItems, setRemovedItems] = useState(() => {
     try { return JSON.parse(localStorage.getItem('l1-compartment-builder-removed') || '[]'); }
@@ -454,18 +459,23 @@ export default function App() {
 
   // ── Auto-save to localStorage on every change ────────────────────────────
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({
-      _ts: lastPushTs.current,
-      allocations,
-      customQtys,
-      customTools,
-      bundles,
-    }));
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({
+        _ts: lastPushTs.current,
+        allocations,
+        customQtys,
+        customTools,
+        bundles,
+      }));
+      setStorageError(false);
+    } catch {
+      setStorageError(true);
+    }
   }, [allocations, customQtys, customTools, bundles]);
 
   // ── Push to KV (300ms debounce, waits for initial pull to finish) ────────
   useEffect(() => {
-    if (!pullDone) return;
+    if (!pullDone || !stateSyncReady) return;
     if (isPullingRef.current) {
       isPullingRef.current = false;
       return;
@@ -478,30 +488,38 @@ export default function App() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ allocations, customQtys, customTools, bundles, removedItems, customDimensions }),
         });
-        if (res.ok) {
-          const data = await res.json();
-          // Use the server-assigned timestamp to avoid clock-skew rejection
-          lastPushTs.current = data._serverTs ?? Date.now();
-        }
+        if (!res.ok) throw new Error(`State sync failed (${res.status})`);
+        const data = await res.json();
+        // Use the server-assigned timestamp to avoid clock-skew rejection
+        lastPushTs.current = data._serverTs ?? Date.now();
         setSyncStatus('synced');
       } catch {
         setSyncStatus('offline');
       }
     }, 300);
     return () => clearTimeout(t);
-  }, [pullDone, allocations, customQtys, customTools, bundles, removedItems, customDimensions]);
+  }, [pullDone, stateSyncReady, allocations, customQtys, customTools, bundles, removedItems, customDimensions]);
 
   // ── Pull from KV every 5s; initial pull on mount ─────────────────────────
   useEffect(() => {
     const pull = async (isInitial) => {
-      try {
-        const [stateRes, imgRes] = await Promise.all([
-          fetch(`${WORKER_URL}/state`),
-          fetch(`${WORKER_URL}/images`),
-        ]);
+      const fetchJson = path => fetch(`${WORKER_URL}/${path}`).then(async response => {
+        if (!response.ok) throw new Error(`${path} sync failed (${response.status})`);
+        return response.json();
+      });
+      // Start both requests together, but unblock the UI as soon as the small
+      // state document is hydrated. The much larger shared image document can
+      // finish in the background without delaying the overview LCP.
+      const stateRequest = fetchJson('state')
+        .then(payload => ({ ok: true, payload }))
+        .catch(() => ({ ok: false, payload: null }));
+      const imageRequest = fetchJson('images')
+        .then(payload => ({ ok: true, payload }))
+        .catch(() => ({ ok: false, payload: null }));
 
-        if (stateRes.ok) {
-          const payload = await stateRes.json();
+      const stateResult = await stateRequest;
+      if (stateResult.ok) {
+          const payload = stateResult.payload;
           // Use _serverTs (set by worker) to compare; fall back to _ts for old records
           const remoteTs = payload?._serverTs ?? payload?._ts ?? 0;
           if (remoteTs && payload?.allocations && (isInitial || remoteTs > lastPushTs.current)) {
@@ -514,10 +532,13 @@ export default function App() {
             if (payload.customDimensions) setCustomDimensions(payload.customDimensions);
             lastPushTs.current = remoteTs;
           }
-        }
+          setStateSyncReady(true);
+      }
+      if (isInitial) setPullDone(true);
 
-        if (imgRes.ok) {
-          const imgPayload = await imgRes.json();
+      const imageResult = await imageRequest;
+      if (imageResult.ok) {
+          const imgPayload = imageResult.payload;
           const remoteImgTs = imgPayload?._serverTs ?? 0;
           if (imgPayload && (isInitial || remoteImgTs > imgLastPushTs.current)) {
             imgLastPushTs.current = remoteImgTs;
@@ -557,14 +578,9 @@ export default function App() {
             }
             // Don't set isImgPullingRef — merged state should be pushed back to KV
           }
-        }
-
-        setSyncStatus('synced');
-      } catch {
-        setSyncStatus('offline');
-      } finally {
-        if (isInitial) setPullDone(true);
+          setImageSyncReady(true);
       }
+      setSyncStatus(stateResult.ok && imageResult.ok ? 'synced' : 'offline');
     };
     pull(true);
     const id = setInterval(() => pull(false), 5000);
@@ -593,7 +609,7 @@ export default function App() {
 
   const totalReq = useMemo(
     () => effectiveInventory.reduce((a, i) => a + getQty(i.name), 0),
-    [customQtys, effectiveInventory] // eslint-disable-line react-hooks/exhaustive-deps
+    [customQtys, effectiveInventory]
   );
 
   // ── Options available for a dropdown slot ────────────────────────────────
@@ -606,18 +622,26 @@ export default function App() {
 
   // ── Persist uploaded images and featured selections to localStorage ─────────
   useEffect(() => {
-    localStorage.setItem('l1-compartment-builder-uploads', JSON.stringify(uploadedImages));
+    try {
+      localStorage.setItem('l1-compartment-builder-uploads', JSON.stringify(uploadedImages));
+    } catch {
+      setStorageError(true);
+    }
   }, [uploadedImages]);
 
   useEffect(() => {
-    localStorage.setItem('l1-compartment-builder-featured', JSON.stringify(featuredImages));
+    try {
+      localStorage.setItem('l1-compartment-builder-featured', JSON.stringify(featuredImages));
+    } catch {
+      setStorageError(true);
+    }
   }, [featuredImages]);
 
   // ── Push images to KV (1s debounce, waits for initial pull) ─────────────
   // No isPullingRef gate here — after a merge-pull we want to push the merged
   // state back so all other devices receive the full combined image set.
   useEffect(() => {
-    if (!pullDone) return;
+    if (!imageSyncReady) return;
     const t = setTimeout(async () => {
       try {
         const res = await fetch(`${WORKER_URL}/images`, {
@@ -625,21 +649,30 @@ export default function App() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ uploadedImages, featuredImages }),
         });
-        if (res.ok) {
-          const data = await res.json();
-          imgLastPushTs.current = data._serverTs ?? Date.now();
-        }
-      } catch { /* silent — main sync status is owned by state push */ }
+        if (!res.ok) throw new Error(`Image sync failed (${res.status})`);
+        const data = await res.json();
+        imgLastPushTs.current = data._serverTs ?? Date.now();
+      } catch {
+        setSyncStatus('offline');
+      }
     }, 1000);
     return () => clearTimeout(t);
-  }, [pullDone, uploadedImages, featuredImages]);
+  }, [imageSyncReady, uploadedImages, featuredImages]);
 
   useEffect(() => {
-    localStorage.setItem('l1-compartment-builder-removed', JSON.stringify(removedItems));
+    try {
+      localStorage.setItem('l1-compartment-builder-removed', JSON.stringify(removedItems));
+    } catch {
+      setStorageError(true);
+    }
   }, [removedItems]);
 
   useEffect(() => {
-    localStorage.setItem('l1-compartment-builder-cdims', JSON.stringify(customDimensions));
+    try {
+      localStorage.setItem('l1-compartment-builder-cdims', JSON.stringify(customDimensions));
+    } catch {
+      setStorageError(true);
+    }
   }, [customDimensions]);
 
   useEffect(() => {
@@ -848,9 +881,9 @@ export default function App() {
       }
       return;
     }
-    let filled = 0;
     setAllocations(prev => {
       const slots = [...prev[compId]];
+      let filled = 0;
       for (let i = 0; i < slots.length && filled < toFill; i++) {
         if (!slots[i]) { slots[i] = bulkFillItem; filled++; }
       }
@@ -913,7 +946,7 @@ export default function App() {
 
   // ── Excel Export ──────────────────────────────────────────────────────────
   const handleExportExcel = async () => {
-    const XLSX = await import('xlsx');
+    const { default: writeXlsxFile } = await import('write-excel-file/browser');
 
     // Sheet 1: Compartment Assignments
     const compHeaders = ['Slot', ...COMPARTMENTS.map(c => c.label ?? c.id)];
@@ -922,7 +955,6 @@ export default function App() {
     for (let i = 0; i < maxSlots; i++) {
       compRows.push([i + 1, ...COMPARTMENTS.map(c => (allocations[c.id] ?? [])[i] || '')]);
     }
-    const ws1 = XLSX.utils.aoa_to_sheet([compHeaders, ...compRows]);
 
     // Sheet 2: Inventory Status
     const invHeaders = ['Equipment Item', 'Total Qty', 'Placed', 'Remaining', 'Assigned To', 'Dimensions', 'Status'];
@@ -937,23 +969,36 @@ export default function App() {
       const status = placed > qty ? 'Over' : remaining === 0 ? 'Complete' : placed > 0 ? 'Partial' : 'Pending';
       return [item.name, qty, placed, remaining, assignedTo || '', effectiveDimensions[item.name] || '', status];
     });
-    const ws2 = XLSX.utils.aoa_to_sheet([invHeaders, ...invRows]);
-
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws1, 'Compartments');
-    XLSX.utils.book_append_sheet(wb, ws2, 'Inventory Status');
-    XLSX.writeFile(wb, 'L1_Compartment_Plan.xlsx');
+    const toSheet = rows => rows.map((row, rowIndex) => row.map(value => ({
+      value,
+      type: typeof value === 'number' ? Number : String,
+      fontWeight: rowIndex === 0 ? 'bold' : undefined,
+    })));
+    await writeXlsxFile([
+      {
+        data: toSheet([compHeaders, ...compRows]),
+        sheet: 'Compartments',
+        stickyRowsCount: 1,
+      },
+      {
+        data: toSheet([invHeaders, ...invRows]),
+        sheet: 'Inventory Status',
+        stickyRowsCount: 1,
+      },
+    ]).toFile('L1_Compartment_Plan.xlsx');
   };
 
   // ── Shared action buttons ─────────────────────────────────────────────────
   const ActionButtons = () => (
     <div className="flex items-center gap-2 print:hidden shrink-0">
       <button onClick={handleExportExcel}
-        className="flex items-center gap-1.5 bg-green-700 hover:bg-green-600 active:bg-green-800 text-white text-sm px-2.5 py-2 rounded transition-colors">
+        data-touch-target="true" aria-label="Export Excel"
+        className="touch-target flex items-center justify-center gap-1.5 bg-green-700 hover:bg-green-600 active:bg-green-800 text-white text-sm px-2.5 py-2 rounded transition-colors">
         <Download size={14} /> <span className="hidden sm:inline">Export Excel</span>
       </button>
       <button onClick={() => window.print()}
-        className="flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700 active:bg-slate-900 text-white text-sm px-2.5 py-2 rounded transition-colors">
+        data-touch-target="true" aria-label="Print PDF"
+        className="touch-target flex items-center justify-center gap-1.5 bg-slate-800 hover:bg-slate-700 active:bg-slate-900 text-white text-sm px-2.5 py-2 rounded transition-colors">
         <Printer size={14} /> <span className="hidden sm:inline">Print PDF</span>
       </button>
     </div>
@@ -971,7 +1016,8 @@ export default function App() {
           <p className="text-[11px] text-slate-400">Compartment Builder</p>
         </div>
         <button onClick={() => setSidebarOpen(false)}
-          className="lg:hidden text-slate-400 hover:text-white p-1.5 rounded transition-colors touch-manipulation"
+          data-touch-target="true"
+          className="touch-target lg:hidden text-slate-400 hover:text-white p-1.5 rounded transition-colors touch-manipulation"
           aria-label="Close menu">
           <X size={18} />
         </button>
@@ -979,7 +1025,7 @@ export default function App() {
 
       <div className="p-3 flex-1 space-y-4 overflow-y-auto">
         <div>
-          <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-1.5">Overviews</p>
+          <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1.5">Overviews</p>
           <div className="space-y-0.5">
             {OVERVIEWS.map(ov => (
               <SideBtn key={ov.id} active={activeTab === ov.id} onClick={() => nav(ov.id)}>
@@ -993,7 +1039,7 @@ export default function App() {
         </div>
 
         <div>
-          <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-1.5">Cab</p>
+          <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1.5">Cab</p>
           <div className="space-y-0.5">
             {COMPARTMENTS.filter(c => c.side === 'Cab').map(comp => (
               <CompBtn key={comp.id} comp={comp} active={activeTab === comp.id}
@@ -1004,7 +1050,7 @@ export default function App() {
         </div>
 
         <div>
-          <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-1.5">Left Side</p>
+          <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1.5">Left Side</p>
           <div className="space-y-0.5">
             {COMPARTMENTS.filter(c => c.side === 'Left').map(comp => (
               <CompBtn key={comp.id} comp={comp} active={activeTab === comp.id}
@@ -1015,7 +1061,7 @@ export default function App() {
         </div>
 
         <div>
-          <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-1.5">Right Side</p>
+          <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1.5">Right Side</p>
           <div className="space-y-0.5">
             {COMPARTMENTS.filter(c => c.side === 'Right').map(comp => (
               <CompBtn key={comp.id} comp={comp} active={activeTab === comp.id}
@@ -1026,7 +1072,7 @@ export default function App() {
         </div>
 
         <div>
-          <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-1.5">Rear</p>
+          <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1.5">Rear</p>
           <div className="space-y-0.5">
             {COMPARTMENTS.filter(c => c.side === 'Rear').map(comp => (
               <CompBtn key={comp.id} comp={comp} active={activeTab === comp.id}
@@ -1051,7 +1097,7 @@ export default function App() {
           />
         </div>
 
-        <div className={`flex items-center gap-1.5 text-[10px] ${
+        <div aria-live="polite" className={`flex items-center gap-1.5 text-[10px] ${
           syncStatus === 'synced'     ? 'text-green-400'  :
           syncStatus === 'syncing'    ? 'text-yellow-400' :
           syncStatus === 'offline'    ? 'text-red-400'    : 'text-slate-500'
@@ -1062,9 +1108,16 @@ export default function App() {
            syncStatus === 'synced'     ? 'Synced with team' :
            'Offline — changes saved locally'}
         </div>
+        {storageError && (
+          <div role="alert" className="flex items-start gap-1.5 text-[10px] text-amber-300">
+            <AlertCircle size={11} className="mt-0.5 shrink-0" />
+            Device storage is full. Export a backup and remove uploaded images.
+          </div>
+        )}
+        <p className="text-[9px] text-slate-400">Build {BUILD_VERSION.slice(0, 12)}</p>
 
-        <button onClick={handleReset}
-          className="w-full flex items-center justify-center gap-1.5 bg-slate-700 hover:bg-red-700 text-white text-xs py-1.5 rounded transition-colors">
+        <button onClick={handleReset} data-touch-target="true"
+          className="touch-target w-full flex items-center justify-center gap-1.5 bg-slate-700 hover:bg-red-700 text-white text-xs py-1.5 rounded transition-colors">
           <RotateCcw size={12} /> Reset All
         </button>
       </div>
@@ -1144,19 +1197,21 @@ export default function App() {
                   ) : placed > 0 ? (
                     <span className="inline-block bg-blue-100 text-blue-700 text-[10px] font-bold px-2 py-0.5 rounded-full">Partial</span>
                   ) : (
-                    <span className="inline-block bg-slate-100 text-slate-400 text-[10px] px-2 py-0.5 rounded-full">Pending</span>
+                    <span className="inline-block bg-slate-100 text-slate-700 text-[10px] px-2 py-0.5 rounded-full">Pending</span>
                   );
 
                   if (isEditing) {
                     return (
-                      <tr key={item.name} className="bg-amber-50 border-l-4 border-amber-400">
+                      <React.Fragment key={item.name}>
+                      <tr className="bg-amber-50 border-l-4 border-amber-400">
                         <td className="px-4 py-2">
                           <div className="flex flex-col gap-0.5">
                             <input
                               autoFocus
+                              aria-label={`Equipment name for ${item.name}`}
                               value={editValues.name ?? ''}
                               onChange={e => setEditValues(prev => ({ ...prev, name: e.target.value }))}
-                              className="w-full border-2 border-amber-300 rounded px-2 py-1 text-xs focus:ring-2 focus:ring-amber-400 outline-none bg-white text-slate-800 font-medium"
+                              className="min-h-11 w-full border-2 border-amber-300 rounded px-2 py-1 text-xs focus:ring-2 focus:ring-amber-400 outline-none bg-white text-slate-800 font-medium"
                             />
                             {!isCustom && editValues.name && editValues.name !== item.name && (
                               <span className="text-[9px] text-amber-600">Renaming will convert to custom item</span>
@@ -1165,41 +1220,59 @@ export default function App() {
                         </td>
                         <td className="px-3 py-2 text-center">
                           <input
-                            type="number" min="0"
+                            type="number" min="0" aria-label={`Required quantity for ${item.name}`}
                             value={editValues.qty ?? ''}
                             onChange={e => setEditValues(prev => ({ ...prev, qty: e.target.value }))}
-                            className="w-14 text-center font-mono border-2 border-amber-300 rounded px-1 py-1 text-xs focus:ring-2 focus:ring-amber-400 outline-none bg-white"
+                            className="min-h-11 w-14 text-center font-mono border-2 border-amber-300 rounded px-1 py-1 text-xs focus:ring-2 focus:ring-amber-400 outline-none bg-white"
                           />
                         </td>
                         <td className="px-3 py-2 text-center font-mono font-bold">
-                          <span className={placed > 0 ? 'text-blue-700' : 'text-slate-400'}>{placed}</span>
+                          <span className={placed > 0 ? 'text-blue-700' : 'text-slate-600'}>{placed}</span>
                         </td>
                         <td className="hidden md:table-cell px-3 py-2 text-center font-mono font-bold">
-                          <span className={overPlaced ? 'text-red-600' : remaining === 0 ? 'text-green-600' : remaining < qty ? 'text-amber-600' : 'text-slate-400'}>{remaining}</span>
+                          <span className={overPlaced ? 'text-red-600' : remaining === 0 ? 'text-green-600' : remaining < qty ? 'text-amber-600' : 'text-slate-600'}>{remaining}</span>
                         </td>
                         <td className="hidden lg:table-cell px-4 py-2 text-xs text-slate-500">{assignedTo || <span className="text-slate-300 italic">—</span>}</td>
                         <td className="hidden lg:table-cell px-4 py-2">
                           <input
+                            aria-label={`Dimensions for ${item.name}`}
                             value={editValues.dims ?? ''}
                             onChange={e => setEditValues(prev => ({ ...prev, dims: e.target.value }))}
                             placeholder="e.g. 36 × 8 × 2 in"
-                            className="w-full border-2 border-amber-300 rounded px-2 py-1 text-xs focus:ring-2 focus:ring-amber-400 outline-none bg-white font-mono text-slate-700"
+                            className="min-h-11 w-full border-2 border-amber-300 rounded px-2 py-1 text-xs focus:ring-2 focus:ring-amber-400 outline-none bg-white font-mono text-slate-700"
                           />
                         </td>
                         <td className="px-3 py-2 text-center">{statusBadge}</td>
                         <td className="px-2 py-2 print:hidden">
                           <div className="flex items-center justify-center gap-1">
-                            <button onClick={() => saveEdit(item)} title="Save changes"
-                              className="p-1.5 rounded text-green-600 hover:bg-green-100 active:bg-green-200 transition-colors touch-manipulation">
+                            <button onClick={() => saveEdit(item)}
+                              aria-label={`Save changes for ${item.name}`} title="Save changes" data-touch-target="true"
+                              className="touch-target p-1.5 rounded text-green-600 hover:bg-green-100 active:bg-green-200 transition-colors touch-manipulation">
                               <Save size={14} />
                             </button>
-                            <button onClick={() => { setEditingItem(null); setEditValues({}); }} title="Cancel"
-                              className="p-1.5 rounded text-slate-400 hover:bg-slate-100 active:bg-slate-200 transition-colors touch-manipulation">
+                            <button onClick={() => { setEditingItem(null); setEditValues({}); }}
+                              aria-label={`Cancel editing ${item.name}`} title="Cancel" data-touch-target="true"
+                              className="touch-target p-1.5 rounded text-slate-400 hover:bg-slate-100 active:bg-slate-200 transition-colors touch-manipulation">
                               <X size={14} />
                             </button>
                           </div>
                         </td>
                       </tr>
+                      <tr className="lg:hidden bg-amber-50 border-l-4 border-amber-400">
+                        <td colSpan={8} className="px-4 pb-3">
+                          <label className="block text-[10px] font-bold uppercase tracking-wide text-amber-800 mb-1">
+                            Dimensions
+                          </label>
+                          <input
+                            aria-label={`Dimensions for ${item.name}`}
+                            value={editValues.dims ?? ''}
+                            onChange={e => setEditValues(prev => ({ ...prev, dims: e.target.value }))}
+                            placeholder="e.g. 36 × 8 × 2 in"
+                            className="min-h-11 w-full border-2 border-amber-300 rounded px-2 py-1 text-xs focus:ring-2 focus:ring-amber-400 outline-none bg-white font-mono text-slate-700"
+                          />
+                        </td>
+                      </tr>
+                      </React.Fragment>
                     );
                   }
 
@@ -1216,19 +1289,24 @@ export default function App() {
                         {isCustom && (
                           <span className="ml-2 text-[9px] font-bold uppercase tracking-wide text-amber-600 bg-amber-50 border border-amber-200 rounded px-1 py-0.5">custom</span>
                         )}
+                        {effectiveDimensions[item.name] && (
+                          <span className="lg:hidden block mt-1 font-mono text-[10px] font-normal text-indigo-700">
+                            {effectiveDimensions[item.name]}
+                          </span>
+                        )}
                       </td>
                       <td className="px-3 py-2.5 text-center">
                         <span className="font-mono font-bold text-slate-700">{qty}</span>
                       </td>
                       <td className="px-3 py-2.5 text-center font-mono font-bold">
-                        <span className={placed > 0 ? 'text-blue-700' : 'text-slate-400'}>{placed}</span>
+                        <span className={placed > 0 ? 'text-blue-700' : 'text-slate-600'}>{placed}</span>
                       </td>
                       <td className="hidden md:table-cell px-3 py-2.5 text-center font-mono font-bold">
                         <span className={
                           overPlaced        ? 'text-red-600'
                           : remaining === 0 ? 'text-green-600'
                           : remaining < qty ? 'text-amber-600'
-                          : 'text-slate-400'
+                          : 'text-slate-600'
                         }>{remaining}</span>
                       </td>
                       <td className="hidden lg:table-cell px-4 py-2.5 text-xs text-slate-600">
@@ -1242,12 +1320,14 @@ export default function App() {
                       <td className="px-3 py-2.5 text-center">{statusBadge}</td>
                       <td className="px-2 py-2.5 text-center print:hidden">
                         <div className="flex items-center justify-center gap-1">
-                          <button onClick={() => startEdit(item)} title="Edit row"
-                            className="p-1.5 rounded text-slate-300 hover:text-blue-500 hover:bg-blue-50 active:bg-blue-100 transition-colors touch-manipulation">
+                          <button onClick={() => startEdit(item)}
+                            aria-label={`Edit ${item.name}`} title="Edit row" data-touch-target="true"
+                            className="touch-target p-1.5 rounded text-slate-400 hover:text-blue-600 hover:bg-blue-50 active:bg-blue-100 transition-colors touch-manipulation">
                             <Pencil size={13} />
                           </button>
-                          <button onClick={() => handleRemoveItem(item.name)} title="Remove item"
-                            className="p-1.5 rounded text-slate-300 hover:text-red-500 hover:bg-red-50 active:bg-red-100 transition-colors touch-manipulation">
+                          <button onClick={() => handleRemoveItem(item.name)}
+                            aria-label={`Remove ${item.name}`} title="Remove item" data-touch-target="true"
+                            className="touch-target p-1.5 rounded text-slate-400 hover:text-red-600 hover:bg-red-50 active:bg-red-100 transition-colors touch-manipulation">
                             <Trash2 size={13} />
                           </button>
                         </div>
@@ -1291,7 +1371,7 @@ export default function App() {
                     </div>
                     <div className="p-3">
                       {tools.length === 0
-                        ? <p className="text-xs text-slate-400 italic">No tools assigned.</p>
+                        ? <p className="text-xs text-slate-600 italic">No tools assigned.</p>
                         : (
                           <ul className="space-y-1.5">
                             {tools.map((t, i) => (
@@ -1336,10 +1416,11 @@ export default function App() {
           </div>
 
           {/* Feature toolbar — always visible */}
-          <div className="px-4 pb-3 flex gap-2 print:hidden">
+          <div className="px-4 pb-3 flex flex-col sm:flex-row gap-2 print:hidden">
             <button
               onClick={() => { setBulkFillOpen(o => !o); setBundleMode(false); setSelectedSlots([]); }}
-              className={`flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-lg font-semibold text-sm transition-colors touch-manipulation ${
+              data-touch-target="true"
+              className={`touch-target flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-lg font-semibold text-sm transition-colors touch-manipulation ${
                 bulkFillOpen
                   ? 'bg-blue-600 text-white shadow-sm'
                   : 'bg-blue-50 hover:bg-blue-100 active:bg-blue-200 text-blue-700 border border-blue-200'
@@ -1349,7 +1430,8 @@ export default function App() {
             </button>
             <button
               onClick={() => { setBundleMode(o => !o); setSelectedSlots([]); setBulkFillOpen(false); setBundleNamePrompt(false); }}
-              className={`flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-lg font-semibold text-sm transition-colors touch-manipulation ${
+              data-touch-target="true"
+              className={`touch-target flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-lg font-semibold text-sm transition-colors touch-manipulation ${
                 bundleMode
                   ? 'bg-purple-600 text-white shadow-sm'
                   : 'bg-purple-50 hover:bg-purple-100 active:bg-purple-200 text-purple-700 border border-purple-200'
@@ -1369,9 +1451,10 @@ export default function App() {
                 <div className="flex flex-col gap-1">
                   <label className="text-xs font-medium text-blue-800">Select Item</label>
                   <select
+                    aria-label="Bulk add equipment"
                     value={bulkFillItem}
                     onChange={e => setBulkFillItem(e.target.value)}
-                    className="w-full border-2 border-blue-300 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-blue-400 outline-none">
+                    className="min-h-11 w-full border-2 border-blue-300 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-blue-400 outline-none">
                     <option value="">— Choose an inventory item —</option>
                     {getOptions('').map(item => {
                       const rem = getQty(item.name) - (placedStats[item.name]?.total ?? 0);
@@ -1383,24 +1466,26 @@ export default function App() {
                     })}
                   </select>
                 </div>
-                <div className="flex items-end gap-3">
+                <div className="flex flex-col sm:flex-row sm:items-end gap-3">
                   <div className="flex flex-col gap-1">
                     <label className="text-xs font-medium text-blue-800">Quantity</label>
                     <input
-                      type="number" min="1"
+                      type="number" min="1" aria-label="Bulk add quantity"
                       value={bulkFillQty}
                       onChange={e => setBulkFillQty(Math.max(1, parseInt(e.target.value, 10) || 1))}
-                      className="w-24 border-2 border-blue-300 rounded-lg px-3 py-2 text-sm text-center bg-white focus:ring-2 focus:ring-blue-400 outline-none" />
+                      className="min-h-11 w-24 border-2 border-blue-300 rounded-lg px-3 py-2 text-sm text-center bg-white focus:ring-2 focus:ring-blue-400 outline-none" />
                   </div>
                   <button
                     onClick={() => handleBulkFill(comp.id)}
                     disabled={!bulkFillItem}
-                    className="flex-1 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 disabled:bg-slate-300 disabled:cursor-not-allowed text-white text-sm font-semibold px-4 py-2 rounded-lg transition-colors touch-manipulation">
+                    data-touch-target="true"
+                    className="touch-target w-full sm:flex-1 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 disabled:bg-slate-300 disabled:cursor-not-allowed text-white text-sm font-semibold px-4 py-2 rounded-lg transition-colors touch-manipulation">
                     Add {bulkFillQty} Slot{bulkFillQty !== 1 ? 's' : ''}
                   </button>
                   <button
                     onClick={() => { setBulkFillOpen(false); setBulkFillItem(''); setBulkFillQty(1); }}
-                    className="text-slate-500 hover:text-slate-700 text-sm px-2 py-2 touch-manipulation">
+                    data-touch-target="true"
+                    className="touch-target text-slate-500 hover:text-slate-700 text-sm px-3 py-2 touch-manipulation">
                     Cancel
                   </button>
                 </div>
@@ -1420,6 +1505,7 @@ export default function App() {
                 onDelete={handleDeleteUploadedImage}
                 featuredImage={featuredImages[comp.id] ?? null}
                 onSetFeatured={(imageRef) => handleSetFeatured(comp.id, imageRef)}
+                onGenerateAI={(text) => handleGenerateAIImage(comp.id, text)}
               />
             </div>
           </div>
@@ -1489,6 +1575,7 @@ export default function App() {
                         {bundleMode && cur && (
                           <button
                             className="shrink-0 touch-manipulation"
+                            aria-label={`${isSelected ? 'Remove' : 'Add'} slot ${idx + 1} ${isSelected ? 'from' : 'to'} bundle`}
                             onPointerDown={e => {
                               e.preventDefault();
                               setSelectedSlots(prev =>
@@ -1500,7 +1587,7 @@ export default function App() {
                               : <Square size={16} className="text-slate-300" />}
                           </button>
                         )}
-                        <div className="w-6 h-6 rounded-full bg-slate-100 flex items-center justify-center text-slate-400 font-bold text-[10px] border border-slate-200 shrink-0">
+                        <div className="w-6 h-6 rounded-full bg-slate-100 flex items-center justify-center text-slate-700 font-bold text-[10px] border border-slate-200 shrink-0">
                           {idx + 1}
                         </div>
                         <ComboSlot
@@ -1509,6 +1596,7 @@ export default function App() {
                           onChange={val => assign(comp.id, idx, val)}
                           getQty={getQty}
                           placedStats={placedStats}
+                          slotLabel={`Equipment for slot ${idx + 1}`}
                         />
                         {bundle && (
                           <span className="shrink-0 text-[9px] font-bold px-1.5 py-0.5 rounded-full whitespace-nowrap"
@@ -1519,7 +1607,8 @@ export default function App() {
                         <button
                           onClick={() => clearSlot(comp.id, idx)}
                           disabled={!cur}
-                          className={`p-1 rounded transition-colors shrink-0 ${
+                          data-touch-target="true" aria-label={`Clear slot ${idx + 1}`}
+                          className={`touch-target p-1 rounded transition-colors shrink-0 ${
                             cur ? 'text-red-500 hover:bg-red-50' : 'text-slate-200 cursor-not-allowed'
                           }`}
                           title="Clear slot">
@@ -1540,13 +1629,15 @@ export default function App() {
               <div className="px-2 pb-2 pt-1 flex gap-2 print:hidden">
                 <button
                   onClick={() => addRow(comp.id)}
-                  className="flex-1 flex items-center justify-center gap-1.5 text-xs text-slate-400 hover:text-green-700 hover:bg-green-50 border border-dashed border-slate-200 hover:border-green-300 rounded-lg py-2 transition-colors touch-manipulation">
+                  data-touch-target="true"
+                  className="touch-target flex-1 flex items-center justify-center gap-1.5 text-xs text-slate-400 hover:text-green-700 hover:bg-green-50 border border-dashed border-slate-200 hover:border-green-300 rounded-lg py-2 transition-colors touch-manipulation">
                   <Plus size={12} /> Add Row
                 </button>
                 {slots.length > SLOTS_PER_COMPARTMENT && slots[slots.length - 1] === '' && (
                   <button
                     onClick={() => removeLastEmptyRow(comp.id)}
-                    className="flex items-center justify-center gap-1.5 text-xs text-slate-400 hover:text-red-600 hover:bg-red-50 border border-dashed border-slate-200 hover:border-red-300 rounded-lg px-3 py-2 transition-colors touch-manipulation">
+                    data-touch-target="true"
+                    className="touch-target flex items-center justify-center gap-1.5 text-xs text-slate-400 hover:text-red-600 hover:bg-red-50 border border-dashed border-slate-200 hover:border-red-300 rounded-lg px-3 py-2 transition-colors touch-manipulation">
                     <X size={12} /> Remove
                   </button>
                 )}
@@ -1660,7 +1751,23 @@ export default function App() {
   const activeComp = COMPARTMENTS.find(c => c.id === activeTab);
 
   return (
-    <div className="flex h-screen w-full bg-slate-100 overflow-hidden">
+    <div
+      className="flex h-[100dvh] min-h-screen w-full bg-slate-100 overflow-hidden"
+      aria-busy={!pullDone}
+    >
+      {!pullDone && (
+        <div
+          className="fixed inset-0 z-[10000] flex items-center justify-center bg-slate-950/95 px-6 text-center text-white"
+          role="status"
+          aria-live="polite"
+        >
+          <div>
+            <Settings size={34} className="mx-auto mb-4 animate-pulse text-red-500" aria-hidden="true" />
+            <p className="text-lg font-bold">Loading L1 Compartment Builder</p>
+            <p className="mt-2 text-sm text-slate-300">Retrieving the latest shared apparatus plan…</p>
+          </div>
+        </div>
+      )}
       {/* Mobile backdrop overlay — only rendered when open so it never blocks touches */}
       {sidebarOpen && (
         <div
@@ -1695,7 +1802,8 @@ export default function App() {
           </div>
           <button
             onClick={() => setSidebarOpen(true)}
-            className="text-white p-2 rounded-md hover:bg-slate-700 active:bg-slate-600 transition-colors touch-manipulation"
+            data-touch-target="true"
+            className="touch-target text-white p-2 rounded-md hover:bg-slate-700 active:bg-slate-600 transition-colors touch-manipulation"
             aria-label="Open navigation menu">
             <Menu size={22} />
           </button>
@@ -1744,7 +1852,7 @@ function ImageCarousel({ presetImages, uploaded, compId, onUpload, onDelete, fea
     } else {
       setIdx(0);
     }
-  }, [compId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [compId]);
 
   // Navigate to newly added image (upload or AI generation)
   useEffect(() => {
@@ -1768,6 +1876,17 @@ function ImageCarousel({ presetImages, uploaded, compId, onUpload, onDelete, fea
   const handleFile = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      setAiError('Choose a PNG, JPEG, or WebP image.');
+      e.target.value = '';
+      return;
+    }
+    if (file.size > 12 * 1024 * 1024) {
+      setAiError('That image is larger than 12 MB. Choose a smaller file.');
+      e.target.value = '';
+      return;
+    }
+    setAiError('');
     const reader = new FileReader();
     reader.onload = async (ev) => {
       pendingNav.current = true;
@@ -1799,6 +1918,7 @@ function ImageCarousel({ presetImages, uploaded, compId, onUpload, onDelete, fea
         <div className="relative flex items-center justify-center min-h-[260px]">
           {!imgErr && cur ? (
             <img src={cur.src} alt={cur.title || 'Compartment'} key={cur.src}
+              loading="lazy" decoding="async"
               className="max-w-full max-h-[500px] object-contain p-2"
               onError={() => setImgErr(true)} />
           ) : (
@@ -1809,12 +1929,12 @@ function ImageCarousel({ presetImages, uploaded, compId, onUpload, onDelete, fea
           )}
           {all.length > 1 && (
             <>
-              <button onClick={prev}
-                className="absolute left-2 top-1/2 -translate-y-1/2 bg-black/30 hover:bg-black/60 active:bg-black/80 text-white rounded-full p-2 transition-colors print:hidden touch-manipulation">
+              <button onClick={prev} aria-label="Previous image" data-touch-target="true"
+                className="touch-target absolute left-2 top-1/2 -translate-y-1/2 bg-black/30 hover:bg-black/60 active:bg-black/80 text-white rounded-full p-2 transition-colors print:hidden touch-manipulation">
                 <ChevronLeft size={18} />
               </button>
-              <button onClick={next}
-                className="absolute right-2 top-1/2 -translate-y-1/2 bg-black/30 hover:bg-black/60 active:bg-black/80 text-white rounded-full p-2 transition-colors print:hidden touch-manipulation">
+              <button onClick={next} aria-label="Next image" data-touch-target="true"
+                className="touch-target absolute right-2 top-1/2 -translate-y-1/2 bg-black/30 hover:bg-black/60 active:bg-black/80 text-white rounded-full p-2 transition-colors print:hidden touch-manipulation">
                 <ChevronRight size={18} />
               </button>
             </>
@@ -1833,7 +1953,7 @@ function ImageCarousel({ presetImages, uploaded, compId, onUpload, onDelete, fea
             <div className="flex items-center gap-1.5 min-w-0">
               <span className="text-xs font-medium text-slate-600 truncate">{cur?.title || ''}</span>
               {!cur?.isUploaded && (
-                <span className="shrink-0 flex items-center gap-0.5 text-[9px] text-slate-400 border border-slate-200 rounded px-1 py-0.5 print:hidden">
+                <span className="shrink-0 flex items-center gap-0.5 text-[9px] text-slate-600 border border-slate-300 rounded px-1 py-0.5 print:hidden">
                   <Lock size={8} /> locked
                 </span>
               )}
@@ -1845,11 +1965,16 @@ function ImageCarousel({ presetImages, uploaded, compId, onUpload, onDelete, fea
             </div>
             <div className="flex items-center gap-2 shrink-0">
               {all.length > 1 && (
-                <div className="flex items-center gap-1.5">
+                <div className="flex items-center">
                   {all.map((_, i) => (
                     <button key={i} onClick={() => goTo(i)}
-                      className={`w-2.5 h-2.5 rounded-full transition-colors touch-manipulation ${i === idx ? 'bg-red-500' : 'bg-slate-300 hover:bg-slate-400 active:bg-slate-500'}`}
-                    />
+                      aria-label={`Show image ${i + 1} of ${all.length}`}
+                      data-touch-target="true"
+                      className="touch-target w-11 h-11 flex items-center justify-center rounded-full touch-manipulation">
+                      <span className={`block w-2.5 h-2.5 rounded-full transition-colors ${
+                        i === idx ? 'bg-red-500' : 'bg-slate-300 group-hover:bg-slate-400'
+                      }`} aria-hidden="true" />
+                    </button>
                   ))}
                 </div>
               )}
@@ -1861,15 +1986,18 @@ function ImageCarousel({ presetImages, uploaded, compId, onUpload, onDelete, fea
                       : { kind: 'preset', src: cur.src };
                     onSetFeatured(imageRef);
                   }}
+                  aria-label={isFeatured ? 'Remove as featured image' : 'Set as featured image'}
+                  data-touch-target="true"
                   title={isFeatured ? 'Remove as featured image' : 'Set as featured — loads first when opening this compartment'}
-                  className={`p-1.5 rounded transition-colors print:hidden touch-manipulation ${isFeatured ? 'text-amber-400 hover:text-slate-300' : 'text-slate-300 hover:text-amber-400 active:text-amber-500'}`}
+                  className={`touch-target p-1.5 rounded transition-colors print:hidden touch-manipulation ${isFeatured ? 'text-amber-400 hover:text-slate-300' : 'text-slate-300 hover:text-amber-400 active:text-amber-500'}`}
                 >
                   <Star size={15} fill={isFeatured ? 'currentColor' : 'none'} />
                 </button>
               )}
               {cur?.isUploaded && (
                 <button onClick={() => { onDelete(compId, cur.uploadIdx); goTo(Math.max(0, idx - 1)); }}
-                  className="p-1.5 rounded text-slate-400 hover:text-red-500 active:text-red-600 transition-colors print:hidden touch-manipulation" title="Remove this image">
+                  aria-label="Remove this image" data-touch-target="true"
+                  className="touch-target p-1.5 rounded text-slate-400 hover:text-red-500 active:text-red-600 transition-colors print:hidden touch-manipulation" title="Remove this image">
                   <X size={14} />
                 </button>
               )}
@@ -1879,7 +2007,7 @@ function ImageCarousel({ presetImages, uploaded, compId, onUpload, onDelete, fea
       </div>
 
       <div className="mt-2 print:hidden">
-        <label className="inline-flex items-center gap-1.5 text-xs text-slate-500 hover:text-red-600 active:text-red-700 cursor-pointer transition-colors bg-slate-50 hover:bg-red-50 border border-slate-200 hover:border-red-300 rounded-lg px-3 py-2 touch-manipulation select-none">
+        <label className="min-h-11 inline-flex items-center gap-1.5 text-xs text-slate-600 hover:text-red-700 active:text-red-800 cursor-pointer transition-colors bg-slate-50 hover:bg-red-50 border border-slate-200 hover:border-red-300 rounded-lg px-3 py-2 touch-manipulation select-none">
           <Upload size={13} />
           <span className="font-medium">Upload rendering or photo</span>
           <input type="file" accept="image/*" className="hidden" onChange={handleFile} />
@@ -1908,6 +2036,7 @@ function ImageCarousel({ presetImages, uploaded, compId, onUpload, onDelete, fea
             Additional instructions for the AI <span className="font-normal text-indigo-400">(optional)</span>
           </label>
           <textarea
+            aria-label="Additional AI rendering instructions"
             value={aiText}
             onChange={e => setAiText(e.target.value)}
             placeholder={`Describe specific details you want included in the rendering — e.g.\n• "Mount the Holmatro V-Struts vertically on the right wall"\n• "Show the chainsaw on a saw mount bracket, blade facing outward"\n• "Add a pull-out tray at the bottom with the hose rolled flat"\n• "Remove the fixed shelf and use the full open bay"\nLeave blank to use standard AI configuration.`}
@@ -1938,12 +2067,14 @@ function ImageCarousel({ presetImages, uploaded, compId, onUpload, onDelete, fea
   );
 }
 
-function compressImage(dataUrl, maxWidth = 1400, quality = 0.82) {
+function compressImage(dataUrl, maxDimension = 1400, quality = 0.82) {
   return new Promise(resolve => {
     const img = new Image();
     img.onload = () => {
       let { width, height } = img;
-      if (width > maxWidth) { height = Math.round((height * maxWidth) / width); width = maxWidth; }
+      const scale = Math.min(1, maxDimension / Math.max(width, height));
+      width = Math.max(1, Math.round(width * scale));
+      height = Math.max(1, Math.round(height * scale));
       const canvas = document.createElement('canvas');
       canvas.width = width;
       canvas.height = height;
@@ -1956,13 +2087,15 @@ function compressImage(dataUrl, maxWidth = 1400, quality = 0.82) {
 }
 
 // ─── Searchable Combo Slot ────────────────────────────────────────────────────
-function ComboSlot({ options, value, onChange, getQty, placedStats }) {
+function ComboSlot({ options, value, onChange, getQty, placedStats, slotLabel }) {
   const [open, setOpen]       = useState(false);
   const [query, setQuery]     = useState('');
   const [hiIdx, setHiIdx]     = useState(-1);
-  const [dropPos, setDropPos] = useState({ top: 0, left: 0, width: 0 });
+  const [dropPos, setDropPos] = useState({ top: 0, left: 0, width: 0, listMaxHeight: 256 });
   const containerRef = useRef(null);
   const inputRef     = useRef(null);
+  const triggerRef   = useRef(null);
+  const listboxId    = useId();
 
   const filtered = query.trim()
     ? options.filter(item => item.name.toLowerCase().includes(query.toLowerCase()))
@@ -1983,22 +2116,42 @@ function ComboSlot({ options, value, onChange, getQty, placedStats }) {
     const reposition = () => {
       if (!containerRef.current) return;
       const rect = containerRef.current.getBoundingClientRect();
-      setDropPos({ top: rect.bottom, left: rect.left, width: rect.width });
+      const viewport = window.visualViewport
+        ? {
+            width: window.visualViewport.width,
+            height: window.visualViewport.height,
+            offsetTop: window.visualViewport.offsetTop,
+            offsetLeft: window.visualViewport.offsetLeft,
+          }
+        : undefined;
+      setDropPos(calculateDropdownPosition(rect, viewport));
     };
     document.addEventListener('pointerdown', closeOnPointer);
     window.addEventListener('scroll', reposition, true);
     window.addEventListener('resize', reposition);
+    window.visualViewport?.addEventListener('resize', reposition);
+    window.visualViewport?.addEventListener('scroll', reposition);
     return () => {
       document.removeEventListener('pointerdown', closeOnPointer);
       window.removeEventListener('scroll', reposition, true);
       window.removeEventListener('resize', reposition);
+      window.visualViewport?.removeEventListener('resize', reposition);
+      window.visualViewport?.removeEventListener('scroll', reposition);
     };
   }, [open]);
 
   const openDropdown = () => {
     if (containerRef.current) {
       const rect = containerRef.current.getBoundingClientRect();
-      setDropPos({ top: rect.bottom, left: rect.left, width: rect.width });
+      const viewport = window.visualViewport
+        ? {
+            width: window.visualViewport.width,
+            height: window.visualViewport.height,
+            offsetTop: window.visualViewport.offsetTop,
+            offsetLeft: window.visualViewport.offsetLeft,
+          }
+        : undefined;
+      setDropPos(calculateDropdownPosition(rect, viewport));
     }
     setOpen(true); setQuery(''); setHiIdx(-1);
     // Auto-focus search input on devices with a physical keyboard. Skip on
@@ -2011,14 +2164,21 @@ function ComboSlot({ options, value, onChange, getQty, placedStats }) {
     }
   };
 
-  const select = (name) => { onChange(name); setOpen(false); setQuery(''); setHiIdx(-1); };
+  const select = (name) => {
+    onChange(name);
+    setOpen(false);
+    setQuery('');
+    setHiIdx(-1);
+    requestAnimationFrame(() => triggerRef.current?.focus());
+  };
 
   const handleKey = (e) => {
     if (e.key === 'ArrowDown')  { e.preventDefault(); setHiIdx(i => Math.min(i + 1, filtered.length - 1)); }
     else if (e.key === 'ArrowUp') { e.preventDefault(); setHiIdx(i => Math.max(i - 1, -1)); }
     else if (e.key === 'Enter') {
       e.preventDefault();
-      if (hiIdx === -1) select('');
+      if (hiIdx === -1 && query.trim() && filtered[0]) select(filtered[0].name);
+      else if (hiIdx === -1) select('');
       else if (filtered[hiIdx]) select(filtered[hiIdx].name);
     }
     else if (e.key === 'Escape') { setOpen(false); setQuery(''); setHiIdx(-1); }
@@ -2027,9 +2187,22 @@ function ComboSlot({ options, value, onChange, getQty, placedStats }) {
   return (
     <div ref={containerRef} className="relative flex-1 min-w-0">
       <button
+        ref={triggerRef}
         onClick={openDropdown}
-        className={`w-full px-2 py-2 border rounded-md text-xs text-left truncate focus:ring-2 focus:ring-red-500 focus:border-red-500 outline-none touch-manipulation ${
-          value ? 'border-green-300 bg-green-50 text-slate-800 font-medium' : 'border-slate-300 bg-white text-slate-400'
+        onKeyDown={e => {
+          if (!open && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
+            e.preventDefault();
+            openDropdown();
+          }
+        }}
+        role="combobox"
+        aria-label={slotLabel}
+        aria-expanded={open}
+        aria-controls={listboxId}
+        aria-haspopup="listbox"
+        data-touch-target="true"
+        className={`touch-target w-full px-2 py-2 border rounded-md text-xs text-left truncate focus:ring-2 focus:ring-red-500 focus:border-red-500 outline-none touch-manipulation ${
+          value ? 'border-green-300 bg-green-50 text-slate-800 font-medium' : 'border-slate-300 bg-white text-slate-600'
         }`}
       >
         {value || '— Empty Slot —'}
@@ -2041,16 +2214,23 @@ function ComboSlot({ options, value, onChange, getQty, placedStats }) {
           style={{ top: dropPos.top, left: dropPos.left, width: dropPos.width }}>
           <input
             ref={inputRef}
+            type="search"
+            role="searchbox"
+            aria-label="Search equipment"
             value={query}
             onChange={e => { setQuery(e.target.value); setHiIdx(-1); }}
             onKeyDown={handleKey}
             placeholder="Type to search tools…"
-            className="w-full p-2 border-2 border-red-400 rounded-t-md text-xs outline-none bg-white"
+            className="min-h-11 w-full p-2 border-2 border-red-400 rounded-t-md text-xs outline-none bg-white"
           />
-          <div className="bg-white border border-t-0 border-slate-300 rounded-b-md max-h-64 overflow-y-auto overscroll-contain">
+          <div id={listboxId} role="listbox" aria-label="Equipment choices"
+            className="bg-white border border-t-0 border-slate-300 rounded-b-md overflow-y-auto overscroll-contain"
+            style={{ maxHeight: dropPos.listMaxHeight }}>
             <button
-              onPointerDown={e => { e.preventDefault(); select(''); }}
-              className={`w-full text-left px-3 py-2.5 text-xs transition-colors touch-manipulation ${
+              type="button" role="option" aria-selected={!value}
+              onClick={() => select('')}
+              data-touch-target="true"
+              className={`touch-target w-full text-left px-3 py-2.5 text-xs transition-colors touch-manipulation ${
                 hiIdx === -1 ? 'bg-red-50 text-red-700' : 'text-slate-400 hover:bg-slate-50 active:bg-slate-100'
               }`}
             >— Empty Slot —</button>
@@ -2060,8 +2240,10 @@ function ComboSlot({ options, value, onChange, getQty, placedStats }) {
               const remaining = qty - placed + (value === item.name ? 1 : 0);
               return (
                 <button key={item.name}
-                  onPointerDown={e => { e.preventDefault(); select(item.name); }}
-                  className={`w-full text-left px-3 py-2.5 text-xs flex items-center justify-between gap-2 transition-colors touch-manipulation ${
+                  type="button" role="option" aria-selected={value === item.name}
+                  onClick={() => select(item.name)}
+                  data-touch-target="true"
+                  className={`touch-target w-full text-left px-3 py-2.5 text-xs flex items-center justify-between gap-2 transition-colors touch-manipulation ${
                     i === hiIdx ? 'bg-red-50 text-red-700' : 'hover:bg-slate-50 active:bg-slate-100 text-slate-700'
                   }`}
                 >
@@ -2109,32 +2291,36 @@ function AddToolForm({ effectiveInventory, onAdd }) {
       <div className="flex flex-col sm:flex-row flex-wrap gap-3">
         <input
           type="text"
+          aria-label="Custom tool name"
           placeholder="Tool name *"
           value={name}
           onChange={e => setName(e.target.value)}
           onKeyDown={e => e.key === 'Enter' && handleSubmit()}
-          className="flex-1 min-w-0 border border-slate-300 rounded px-3 py-2.5 text-sm focus:ring-2 focus:ring-red-500 focus:border-red-500 outline-none bg-white"
+          className="min-h-11 flex-1 min-w-0 border border-slate-300 rounded px-3 py-2.5 text-sm focus:ring-2 focus:ring-red-500 focus:border-red-500 outline-none bg-white"
         />
         <input
           type="number"
+          aria-label="Custom tool quantity"
           placeholder="Qty"
           min="1"
           value={qty}
           onChange={e => setQty(Math.max(1, parseInt(e.target.value, 10) || 1))}
-          className="w-full sm:w-20 border border-slate-300 rounded px-3 py-2.5 text-sm text-center focus:ring-2 focus:ring-red-500 focus:border-red-500 outline-none bg-white"
+          className="min-h-11 w-full sm:w-20 border border-slate-300 rounded px-3 py-2.5 text-sm text-center focus:ring-2 focus:ring-red-500 focus:border-red-500 outline-none bg-white"
         />
         <input
           type="text"
+          aria-label="Custom tool dimensions"
           placeholder='Dimensions — optional (e.g. 42.5 × 5.9 × 8.3 in)'
           value={dims}
           onChange={e => setDims(e.target.value)}
           onKeyDown={e => e.key === 'Enter' && handleSubmit()}
-          className="flex-1 min-w-0 border border-slate-300 rounded px-3 py-2.5 text-sm focus:ring-2 focus:ring-red-500 focus:border-red-500 outline-none bg-white"
+          className="min-h-11 flex-1 min-w-0 border border-slate-300 rounded px-3 py-2.5 text-sm focus:ring-2 focus:ring-red-500 focus:border-red-500 outline-none bg-white"
         />
         <button
           onClick={handleSubmit}
           disabled={!name.trim()}
-          className="w-full sm:w-auto bg-red-600 hover:bg-red-700 active:bg-red-800 disabled:bg-slate-300 disabled:cursor-not-allowed text-white px-4 py-2.5 rounded text-sm font-medium transition-colors flex items-center justify-center gap-1.5 touch-manipulation"
+          data-touch-target="true"
+          className="touch-target w-full sm:w-auto bg-red-600 hover:bg-red-700 active:bg-red-800 disabled:bg-slate-300 disabled:cursor-not-allowed text-white px-4 py-2.5 rounded text-sm font-medium transition-colors flex items-center justify-center gap-1.5 touch-manipulation"
         >
           <Plus size={14} /> Add Tool
         </button>
@@ -2150,8 +2336,8 @@ function AddToolForm({ effectiveInventory, onAdd }) {
 // ─── Small shared components ──────────────────────────────────────────────────
 function SideBtn({ active, onClick, children }) {
   return (
-    <button onClick={onClick}
-      className={`w-full text-left px-3 py-1.5 rounded flex items-center gap-2 text-xs transition-colors ${
+    <button onClick={onClick} data-touch-target="true"
+      className={`touch-target w-full text-left px-3 py-1.5 rounded flex items-center gap-2 text-xs transition-colors ${
         active ? 'bg-red-600 text-white font-medium' : 'hover:bg-slate-800 text-slate-300'
       }`}>
       {children}
@@ -2161,8 +2347,8 @@ function SideBtn({ active, onClick, children }) {
 
 function CompBtn({ comp, active, count, onClick }) {
   return (
-    <button onClick={onClick}
-      className={`w-full text-left px-3 py-1.5 rounded flex items-center justify-between text-xs transition-colors ${
+    <button onClick={onClick} data-touch-target="true"
+      className={`touch-target w-full text-left px-3 py-1.5 rounded flex items-center justify-between text-xs transition-colors ${
         active ? 'bg-slate-700 text-white font-medium' : 'hover:bg-slate-800 text-slate-300'
       }`}>
       <div className="flex items-center gap-1.5">
