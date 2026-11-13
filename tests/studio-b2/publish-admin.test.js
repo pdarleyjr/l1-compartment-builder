@@ -19,11 +19,11 @@ describe('publish decisions', () => {
     expect(publishBody({ id: 'iv_1' }, { revision: 4 })).toEqual({ kind: 'version', ref: 'iv_1', expectRevision: 4 });
     expect(publishBody({ id: 'iv_1' }, null, true)).toEqual({ kind: 'version', ref: 'iv_1', expectRevision: 0, acknowledgeStale: true });
   });
-  it('extracts a compartment main image from tolerant shapes', () => {
+  it('extracts a compartment main image from {mainImages:{[compId]:MainImage}}', () => {
     const m = { compartmentId: 'LS1', revision: 2 };
-    expect(extractMain({ mainImages: [m] }, 'LS1')).toBe(m);
     expect(extractMain({ mainImages: { LS1: m } }, 'LS1')).toBe(m);
-    expect(extractMain([m], 'LS2')).toBeNull();
+    expect(extractMain({ mainImages: { LS1: m } }, 'LS2')).toBeNull();
+    expect(extractMain({ mainImages: {} }, 'LS1')).toBeNull();
   });
   it('only drafts/approved can be published', () => {
     expect(canPublish({ status: 'draft' })).toBe(true);
@@ -116,9 +116,10 @@ describe('generate helpers', () => {
     expect(classifySubmitError({ status: 402, code: 'BUDGET_EXCEEDED' }).kind).toBe('budget');
     expect(classifySubmitError({ status: 429, code: 'CONCURRENCY_LIMIT' }).kind).toBe('busy');
     expect(classifySubmitError({ status: 503, code: 'AI_DISABLED' }).message).toMatch(/turned off/);
-    const c = classifySubmitError({ status: 409, code: 'CONFIRM_ESTIMATE', message: 'Please confirm the estimate', details: { estimateUsd: 0.4 } });
+    const c = classifySubmitError({ status: 409, code: 'CONFLICT', message: 'needs confirmation', details: { estimate: { usd: 0.4, basis: 'b' }, requiresConfirm: true } });
     expect(c).toMatchObject({ kind: 'confirm', estimateUsd: 0.4 });
     expect(isConfirmEstimate({ status: 409, code: 'STALE_SOURCE', message: 'confirm' })).toBe(false);
+    expect(isConfirmEstimate({ status: 409, code: 'CONFLICT', message: 'confirm', details: {} })).toBe(false);
     expect(humanError({ message: 'plain' })).toBe('plain');
   });
   it('summarizes with warnings', () => {
@@ -128,9 +129,9 @@ describe('generate helpers', () => {
     expect(s.warnings).toHaveLength(3);
   });
   it('normalizes usage meters', () => {
-    const m = usageMeters({ monthUsd: 5, limits: { monthlyUsd: 25 }, dayUsd: 1 });
+    const m = usageMeters({ month: { spent: 4, reserved: 1, cap: 25 }, today: { spent: 1, reserved: 0, cap: 8 }, user: { spent: 0, reserved: 0, cap: 5 } });
     expect(m[0]).toMatchObject({ label: 'This month', used: 5, limit: 25, pct: 20 });
-    expect(m[1].limit).toBeNull();
+    expect(m.map(x => x.label)).toEqual(['This month', 'Today', 'You today']);
     expect(usageMeters(null)).toEqual([]);
   });
 });

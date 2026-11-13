@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AlertTriangle, CheckCircle2, Loader2, Save } from 'lucide-react';
 import { api } from '../../lib/api.js';
-import { INSTRUCTIONS_MAX, ORIENTATIONS } from '../../../shared/contracts.js';
-import { availableZones, diagramModel, itemsByZone, layoutDirty, normalizeLayout, ORIENTATION_LABELS, placementOf, setPlacement, zoneLabel } from './layoutModel.js';
+import { ID_PATTERN, INSTRUCTIONS_MAX, ORIENTATIONS } from '../../../shared/contracts.js';
+import { availableZones, diagramModel, itemsByZone, layoutDirty, layoutPayload, normalizeLayout, ORIENTATION_LABELS, placementOf, setPlacement, zoneLabel } from './layoutModel.js';
 import { humanError } from '../common/format.js';
 
 const designPath = compId => `/compartments/${encodeURIComponent(compId)}/design`;
-const unwrap = res => { const d = res?.design ?? res ?? {}; return { layout: normalizeLayout(d.layout), revision: Number(d.revision ?? res?.revision ?? 0) }; };
+const unwrap = res => ({ layout: normalizeLayout(res?.design?.layout), revision: Number(res?.design?.revision ?? 0) });
 
 /**
  * Step 4: arrange tools and mounts by zone/orientation. Selects work by keyboard and touch; drag is a pointer convenience.
@@ -35,7 +35,7 @@ export default function ArrangeStep({ compId, tools, mounts, geometry }) {
     const mine = layoutRef.current;
     setPhase('saving'); setMessage('');
     try {
-      const res = await api(designPath(compId), { method: 'PUT', json: { layout: mine, expectRevision: revRef.current } });
+      const res = await api(designPath(compId), { method: 'PUT', json: { layout: layoutPayload(mine), expectRevision: revRef.current } });
       const d = unwrap(res);
       setRevision(d.revision || revRef.current + 1); setSaved(mine); setPhase('idle');
     } catch (e) {
@@ -57,11 +57,13 @@ export default function ArrangeStep({ compId, tools, mounts, geometry }) {
   const zones = availableZones(geometry, layout);
   const byZone = itemsByZone(layout, zones);
   const model = diagramModel(geometry, zones);
+  // Only items the server can resolve (tools with an equipment id, saved mounts) can be placed.
   const items = [
-    ...tools.map(t => ({ kind: 'tool', ref: t.ref, name: t.qty > 1 ? `${t.name} ×${t.qty}` : t.name, rawName: t.name })),
-    ...mounts.map(m => ({ kind: 'mount', ref: m.id, name: m.title || m.name || 'Mount', rawName: m.title || m.name || 'Mount' })),
+    ...tools.filter(t => ID_PATTERN.test(t.ref)).map(t => ({ kind: 'tool', ref: t.ref, name: t.qty > 1 ? `${t.name} ×${t.qty}` : t.name, rawName: t.name })),
+    ...mounts.map(m => ({ kind: 'mount', ref: m.id, name: m.name || 'Mount', rawName: m.name || 'Mount' })),
   ];
-  const place = (item, patch) => setLayout(l => setPlacement(l, { kind: item.kind, ref: item.ref, name: item.rawName }, patch));
+  const labelOf = new Map(items.map(it => [`${it.kind === 'mount' ? 'mount' : 'equipment'}:${it.ref}`, it.name]));
+  const place = (item, patch) => setLayout(l => setPlacement(l, item, patch));
   const onDrop = (e, zone) => {
     e.preventDefault();
     try { const it = JSON.parse(e.dataTransfer.getData('application/x-l1-item')); place(it, { zone }); } catch { /* ignore foreign drops */ }
@@ -81,7 +83,7 @@ export default function ArrangeStep({ compId, tools, mounts, geometry }) {
               <rect x={r.x} y={r.y} width={r.w} height={r.h} rx="4" className={byZone[r.zone].length ? 'fill-red-50 stroke-red-700' : 'fill-white stroke-slate-400'} strokeWidth="1.5" />
               <text x={r.x + 6} y={r.y + 14} fontSize="11" fontWeight="700" className="fill-slate-800">{zoneLabel(r.zone)}</text>
               {byZone[r.zone].slice(0, Math.max(1, Math.floor((r.h - 20) / 12))).map((p, i) => (
-                <text key={p.kind + p.ref} x={r.x + 6} y={r.y + 28 + i * 12} fontSize="9" className="fill-slate-700">{p.name.length > 26 ? `${p.name.slice(0, 25)}…` : p.name}</text>
+                <text key={p.targetType + p.targetId} x={r.x + 6} y={r.y + 28 + i * 12} fontSize="9" className="fill-slate-700">{((n) => (n.length > 26 ? `${n.slice(0, 25)}…` : n))(labelOf.get(`${p.targetType}:${p.targetId}`) ?? 'Item')}</text>
               ))}
             </g>
           ))}
@@ -106,7 +108,7 @@ export default function ArrangeStep({ compId, tools, mounts, geometry }) {
             const p = placementOf(layout, it); const id = `${it.kind}-${it.ref}`;
             return (
               <li key={id} className="rounded-lg border border-slate-300 bg-white p-2 grid gap-2 sm:grid-cols-[minmax(0,1fr)_9rem_9rem] sm:items-center">
-                <div draggable onDragStart={e => e.dataTransfer.setData('application/x-l1-item', JSON.stringify({ kind: it.kind, ref: it.ref, name: it.name, rawName: it.rawName }))}
+                <div draggable onDragStart={e => e.dataTransfer.setData('application/x-l1-item', JSON.stringify({ kind: it.kind, ref: it.ref, name: it.name }))}
                   className="min-w-0 text-sm font-semibold text-slate-900 break-words sm:cursor-grab">
                   <span className="text-[10px] uppercase tracking-wide text-slate-500 mr-1">{it.kind}</span>{it.name}
                 </div>

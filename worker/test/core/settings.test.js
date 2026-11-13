@@ -16,7 +16,7 @@ describe('admin settings', () => {
     const env = makeEnv();
     const { settings } = await (await worker.fetch(request('GET', '/api/admin/settings', { actor: ADMIN }), env)).json();
     expect(Object.keys(settings).sort()).toEqual([...SETTINGS_KEYS].sort());
-    expect(settings['budget.monthlyUsd']).toMatchObject({ value: 25, revision: 0, isDefault: true });
+    expect(settings['budget.monthlyUsd']).toEqual(expect.objectContaining({ value: 25, revision: 0, default: 25 }));
     expect((await worker.fetch(request('GET', '/api/admin/settings', { actor: EDITOR }), env)).status).toBe(403);
   });
 
@@ -35,7 +35,7 @@ describe('admin settings', () => {
     expect(hist.history.map(h => [h.revision, h.value, h.updatedBy])).toEqual([[2, 50, 'owner@example.com'], [1, 40, 'owner@example.com']]);
     expect((await env.DB.prepare("SELECT COUNT(*) n FROM audit_log WHERE action='settings.update'").first()).n).toBe(2);
     const listed = await (await worker.fetch(request('GET', '/api/admin/settings', { actor: ADMIN }), env)).json();
-    expect(listed.settings['budget.monthlyUsd']).toMatchObject({ value: 50, revision: 2, isDefault: false });
+    expect(listed.settings['budget.monthlyUsd']).toEqual(expect.objectContaining({ value: 50, revision: 2, default: 25 }));
   });
 
   it('a lost CAS race inside the batch rolls everything back', async () => {

@@ -9,7 +9,7 @@ import { HttpError, actorLabel } from '../http.js';
  * @returns {Promise<{statements:any[], doc:object, revision:number|null}>} */
 export async function resolvePlannerContext(db, { ops, baseRevision, clientOpId, actor, now }) {
   if (Array.isArray(ops) && ops.length) {
-    const { statements, result } = await applyPlannerOpsInBatch(db, { ops, actor: actorLabel(actor), clientOpId, now, baseRevision });
+    const { statements, result } = await applyPlannerOpsInBatch(db, { ops, actor, clientOpId, now, baseRevision });
     if (result.conflicts?.length) {
       throw new HttpError('CONFLICT', 'The inventory changed on another device. Nothing was saved.', {
         conflicts: result.conflicts, plannerRevision: result.revision,

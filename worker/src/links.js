@@ -10,12 +10,11 @@ import { linkInsertStatements, resolveLinks, resolvePlannerContext } from './stu
 export async function putLinks({ request, db, actor, params, now }) {
   const body = await readJson(request);
   const asset = await requireCommittedAsset(db, params.assetId);
-  const v = validated(validateLinks(body.links ?? []));
-  const links = Array.isArray(v) ? v : v.links ?? [];
+  const input = validated(validateLinks(body));
   const ctx = await resolvePlannerContext(db, {
-    ops: body.plannerOps, baseRevision: body.baseRevision, clientOpId: `links:${asset.id}:${now}`, actor, now,
+    ops: input.plannerOps, baseRevision: input.baseRevision, clientOpId: `links:${asset.id}:${now}`, actor, now,
   });
-  const rows = await resolveLinks(db, { doc: ctx.doc, compId: asset.compartment_id, links });
+  const rows = await resolveLinks(db, { doc: ctx.doc, compId: asset.compartment_id, links: input.links });
   await db.batch([
     ...ctx.statements,
     db.prepare("DELETE FROM asset_links WHERE asset_id = ? AND state = 'confirmed'").bind(asset.id),

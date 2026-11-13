@@ -22,10 +22,9 @@ export function renderBody({ mode, preset, instructions }) {
   return body;
 }
 
-/** Does this preset need an explicit cost confirmation? Server flag on the estimate wins; `max` defaults to yes. */
+/** Does this preset need an explicit cost confirmation? The server flag on the estimate wins; until it arrives `max` defaults to yes. */
 export function needsConfirm(preset, est) {
   if (typeof est?.requiresConfirm === 'boolean') return est.requiresConfirm;
-  if (typeof est?.confirm === 'boolean') return est.confirm;
   return !!SETTINGS_DEFAULTS.presets[preset]?.confirm;
 }
 
@@ -52,7 +51,7 @@ export function buildSummary({ tools, counts, assets, mounts, geometry }) {
 /** Map a failed create-job call to UI state. @param {any} err @returns {{kind:'confirm'|'error'|'budget'|'busy'|'disabled', message:string, estimateUsd?:number}} */
 export function classifySubmitError(err) {
   if (isConfirmEstimate(err)) {
-    const usd = Number(err?.details?.estimateUsd ?? err?.details?.usd);
+    const usd = Number(err?.details?.estimate?.usd);
     return { kind: 'confirm', message: 'This preset needs your OK on the cost first.', estimateUsd: Number.isFinite(usd) ? usd : undefined };
   }
   const kind = { BUDGET_EXCEEDED: 'budget', CONCURRENCY_LIMIT: 'busy', AI_DISABLED: 'disabled' }[err?.code] ?? 'error';
@@ -60,22 +59,16 @@ export function classifySubmitError(err) {
 }
 
 /**
- * Normalise GET /api/usage (shape tolerant) into labelled meters.
+ * GET /api/usage → {today, month, user: {spent, reserved, cap}, jobs, recent} as labelled meters (spent + reserved vs cap).
  * @returns {{label:string, used:number, limit:number|null, pct:number|null}[]}
  */
 export function usageMeters(u) {
   if (!u || typeof u !== 'object') return [];
-  const pick = (...keys) => { for (const k of keys) { const v = k.split('.').reduce((o, p) => o?.[p], u); if (typeof v === 'number') return v; } return null; };
-  const defs = [
-    ['This month', ['monthUsd', 'month.usd', 'monthly.usd', 'month.spentUsd'], ['limits.monthlyUsd', 'monthLimitUsd', 'month.limitUsd', 'limits.monthUsd']],
-    ['Today', ['dayUsd', 'day.usd', 'daily.usd', 'day.spentUsd'], ['limits.dailyUsd', 'dayLimitUsd', 'day.limitUsd']],
-    ['You today', ['userDayUsd', 'user.usd', 'user.dayUsd', 'user.spentUsd'], ['limits.userDailyUsd', 'userDayLimitUsd', 'user.limitUsd']],
-  ];
-  return defs.map(([label, used, lim]) => {
-    const spent = pick(...used); const limit = pick(...lim);
-    if (spent == null) return null;
-    return { label, used: spent, limit, pct: limit ? Math.min(100, Math.round((spent / limit) * 100)) : null };
-  }).filter(Boolean);
+  return [['This month', u.month], ['Today', u.today], ['You today', u.user]].filter(([, m]) => m && typeof m.spent === 'number').map(([label, m]) => {
+    const used = m.spent + (m.reserved ?? 0);
+    const limit = typeof m.cap === 'number' ? m.cap : null;
+    return { label, used, limit, pct: limit ? Math.min(100, Math.round((used / limit) * 100)) : null };
+  });
 }
 
 /** @param {{used:number, limit:number|null}} m */

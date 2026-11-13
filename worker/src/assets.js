@@ -72,7 +72,9 @@ export async function putVariant({ request, env, db, actor, params, now }) {
   const bytes = await readBytes(request, MAX_BY_VARIANT[variant]);
   if (!bytes.length) throw new HttpError('INVALID_REQUEST', 'The upload was empty.');
   const sniff = sniffImage(bytes);
-  if (!sniff || !UPLOAD_MIME[variant].includes(sniff.type)) {
+  // Markup layers are transparent PNGs (the processor needs the alpha channel); the editor sends the same PNG for every variant.
+  const accepted = asset.category === 'markup' ? [...UPLOAD_MIME[variant], 'image/png'] : UPLOAD_MIME[variant];
+  if (!sniff || !accepted.includes(sniff.type)) {
     throw new HttpError('UNSUPPORTED_MEDIA', variant === 'original'
       ? 'Only JPEG, PNG or WebP images can be uploaded (convert HEIC photos first).'
       : 'Display and thumbnail images must be WebP or JPEG.');
@@ -95,11 +97,8 @@ export async function putVariant({ request, env, db, actor, params, now }) {
   return new Response(null, { status: 204, headers: SECURITY_HEADERS });
 }
 
-async function linkInput(body) {
-  if (body.links === undefined) return [];
-  const v = validated(validateLinks(Array.isArray(body.links) ? body.links : body.links));
-  return Array.isArray(v) ? v : v.links ?? [];
-}
+/** Commit body = {links?, plannerOps?, baseRevision?} (shared/validation.js validateLinks). */
+const commitInput = body => validated(validateLinks(body));
 
 /** POST /api/assets/:assetId/commit — links and planner ops apply in one D1 batch with the status flip. */
 export async function commitAsset({ request, db, actor, params, now }) {
@@ -111,18 +110,18 @@ export async function commitAsset({ request, db, actor, params, now }) {
   const ready = parseJson(asset.variants_ready, []);
   const missing = ASSET_VARIANTS.filter(v => !ready.includes(v));
   if (missing.length) throw new HttpError('CONFLICT', `Upload is not complete (missing: ${missing.join(', ')}).`, { missing });
-  const links = await linkInput(body);
+  const input = commitInput(body);
   const ctx = await resolvePlannerContext(db, {
-    ops: body.plannerOps, baseRevision: body.baseRevision, clientOpId: `commit:${asset.id}`, actor, now,
+    ops: input.plannerOps, baseRevision: input.baseRevision, clientOpId: `commit:${asset.id}`, actor, now,
   });
-  const rows = await resolveLinks(db, { doc: ctx.doc, compId: asset.compartment_id, links });
+  const rows = await resolveLinks(db, { doc: ctx.doc, compId: asset.compartment_id, links: input.links });
   const me = actorLabel(actor);
   await db.batch([
     ...ctx.statements,
     db.prepare("UPDATE assets SET status = 'committed', committed_at = ?, updated_at = ?, revision = revision + 1 WHERE id = ? AND status = 'pending'")
       .bind(now, now, asset.id),
     ...linkInsertStatements(db, asset.id, rows, actor, now),
-    auditStatement(db, { actor: me, action: 'asset.commit', entityType: 'asset', entityId: asset.id, detail: { links: rows.length, plannerOps: body.plannerOps?.length ?? 0 } }, now),
+    auditStatement(db, { actor: me, action: 'asset.commit', entityType: 'asset', entityId: asset.id, detail: { links: rows.length, plannerOps: input.plannerOps.length } }, now),
   ]);
   const fresh = await loadAsset(db, asset.id);
   const out = { asset: assetDto(fresh, { links: (await linksFor(db, [asset.id])).get(asset.id) }) };

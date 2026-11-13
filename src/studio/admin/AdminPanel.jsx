@@ -15,29 +15,29 @@ function UsageTab() {
   if (state.loading) return <p className="p-4 text-sm text-slate-600">Loading…</p>;
   if (state.error) return <p role="alert" className="p-4 text-sm text-red-700">{humanError(state.error)}</p>;
   const meters = usageMeters(state.usage);
-  const byUser = Array.isArray(state.usage?.byUser) ? state.usage.byUser : [];
+  const byUser = Object.values((state.usage?.recent ?? []).reduce((m, r) => { const e = m[r.actor] ?? (m[r.actor] = { actor: r.actor, usd: 0 }); e.usd += r.actualUsd ?? r.estimatedUsd ?? 0; return m; }, {}));
   return (
     <div className="p-3 sm:p-4 space-y-3" data-testid="admin-usage">
       {!meters.length && <p className="text-sm text-slate-600">No usage recorded yet.</p>}
       {meters.map(m => <div key={m.label} className="rounded-lg border border-slate-300 bg-white p-3"><div className="flex justify-between text-sm"><b>{m.label}</b><span>{meterText(m)}</span></div>
         {m.pct != null && <div className="mt-1 h-2 rounded bg-slate-200"><div className={`h-2 rounded ${m.pct >= 90 ? 'bg-red-600' : 'bg-green-600'}`} style={{ width: `${m.pct}%` }} /></div>}</div>)}
       {byUser.length > 0 && <table className="w-full text-sm"><thead><tr className="text-left text-xs text-slate-600"><th className="py-1">Person</th><th>Spent</th></tr></thead>
-        <tbody>{byUser.map(u => <tr key={u.email ?? u.user} className="border-t border-slate-200"><td className="py-1 break-all">{u.email ?? u.user}</td><td>{meterText({ used: u.usd ?? u.spentUsd ?? 0, limit: null })}</td></tr>)}</tbody></table>}
+        <tbody>{byUser.map(u => <tr key={u.actor} className="border-t border-slate-200"><td className="py-1 break-all">{u.actor}</td><td>{meterText({ used: u.usd, limit: null })}</td></tr>)}</tbody></table>}
     </div>
   );
 }
 
 function AuditTab() {
   const [state, setState] = useState({ loading: true, rows: [], error: null });
-  useEffect(() => { api('/admin/audit').then(r => setState({ loading: false, rows: Array.isArray(r) ? r : r?.entries ?? r?.audit ?? [], error: null })).catch(error => setState({ loading: false, rows: [], error })); }, []);
+  useEffect(() => { api('/admin/audit').then(r => setState({ loading: false, rows: r.entries, error: null })).catch(error => setState({ loading: false, rows: [], error })); }, []);
   if (state.loading) return <p className="p-4 text-sm text-slate-600">Loading…</p>;
   if (state.error) return <p role="alert" className="p-4 text-sm text-red-700">{humanError(state.error)}</p>;
   return (
     <ul className="p-3 sm:p-4 divide-y divide-slate-200 text-sm" data-testid="admin-audit">
       {!state.rows.length && <li className="text-slate-600">Nothing recorded yet.</li>}
       {state.rows.slice(0, 100).map((r, i) => (
-        <li key={r.id ?? i} className="py-2 min-w-0"><span className="font-semibold">{r.action ?? r.event}</span> <span className="text-slate-600">{r.target ?? r.entity ?? ''}</span>
-          <span className="block text-xs text-slate-600 break-all">{r.actor ?? r.email} · {formatWhen(r.ts ?? r.createdAt)}</span></li>))}
+        <li key={r.id ?? i} className="py-2 min-w-0"><span className="font-semibold">{r.action}</span> <span className="text-slate-600">{[r.entityType, r.entityId].filter(Boolean).join(' ')}</span>
+          <span className="block text-xs text-slate-600 break-all">{r.actor} · {formatWhen(r.at)}</span></li>))}
     </ul>
   );
 }

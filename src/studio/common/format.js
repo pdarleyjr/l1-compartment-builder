@@ -32,9 +32,9 @@ export function humanError(err) {
   }
 }
 
-/** @param {any} err @returns {boolean} true for a server "estimate must be confirmed" 409 */
+/** @param {any} err @returns {boolean} true for the server's "estimate must be confirmed" 409 (CONFLICT, details.requiresConfirm) */
 export function isConfirmEstimate(err) {
-  return err?.status === 409 && /confirm/i.test(`${err?.code ?? ''} ${err?.message ?? ''}`) && !/REVISION|STALE/.test(err?.code ?? '');
+  return err?.status === 409 && err?.code === 'CONFLICT' && err?.details?.requiresConfirm === true;
 }
 
 /** Download-free label for a version's cost. @param {{actualCostUsd?:number|null, estimatedCostUsd?:number|null}|null} job */

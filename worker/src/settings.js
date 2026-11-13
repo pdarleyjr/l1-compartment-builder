@@ -55,8 +55,8 @@ export async function getSettings(arg, keys) {
   for (const key of SETTINGS_KEYS) {
     const row = rows.get(key);
     settings[key] = row
-      ? { value: row.value, revision: row.revision, updatedBy: row.updatedBy, updatedAt: row.updatedAt, isDefault: false }
-      : { value: structuredClone(SETTINGS_DEFAULTS[key]), revision: 0, updatedBy: null, updatedAt: null, isDefault: true };
+      ? { value: row.value, revision: row.revision, default: structuredClone(SETTINGS_DEFAULTS[key]), updatedBy: row.updatedBy, updatedAt: row.updatedAt }
+      : { value: structuredClone(SETTINGS_DEFAULTS[key]), revision: 0, default: structuredClone(SETTINGS_DEFAULTS[key]), updatedBy: null, updatedAt: null };
   }
   return json({ settings });
 }

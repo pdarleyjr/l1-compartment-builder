@@ -25,7 +25,9 @@ function placementsOf(design) {
  * Build the scene spec for one compartment. Equipment comes strictly from the authoritative planner doc; only
  * `confirmed` links to committed assets of this compartment contribute photos (suggested/rejected are ignored).
  * Photos: plan → compartment photo only; edit → compartment + parent version + markup; reference → everything.
- * @param {{compId:string, doc:object, design?:object, assets?:object[], links?:object[], mounts?:object[], settings?:object,
+ * `referenceAssetIds` (≤ 4 committed assets of this compartment chosen by the user) become references with role 'other'
+ * and the asset title as label, in every mode.
+ * @param {{compId:string, doc:object, design?:object, referenceAssetIds?:string[], assets?:object[], links?:object[], mounts?:object[], settings?:object,
  *   mode?:'plan'|'reference'|'edit', preset?:string, instructions?:string, parentVersion?:{id:string, assetId:string}|null,
  *   markupAsset?:{id:string}|null, plannerRevision?:number}} input
  * @returns {Promise<object>} spec {schema, compartment, equipment, mounts, references, render, inventoryFingerprint, plannerRevision, designRevision}
@@ -67,10 +69,10 @@ export async function buildSceneSpec(input) {
     }
     return [...ids].sort(cmp);
   };
-  const place = (g, type) => placements.find(p => (p.targetType === type) && (type === 'equipment' ? p.targetId === g.equipmentId
-    : type === 'assignment' ? g.assignmentIds.includes(p.targetId) : g.bundleIds.includes(p.targetId)));
+  const place = (g, type) => placements.find(p => p.targetType === type
+    && (type === 'equipment' ? p.targetId === g.equipmentId : g.assignmentIds.includes(p.targetId)));
   const equipment = [...groups.values()].sort((a, b) => cmp(a.name, b.name) || cmp(a.equipmentId, b.equipmentId)).map(g => {
-    const p = place(g, 'equipment') ?? place(g, 'assignment') ?? place(g, 'bundle');
+    const p = place(g, 'equipment') ?? place(g, 'assignment');
     return {
       equipmentId: g.equipmentId, name: g.name, quantity: g.count, assignmentIds: g.assignmentIds,
       dims: dimsOf(doc, g.name) || null,
@@ -102,6 +104,10 @@ export async function buildSceneSpec(input) {
   if (compPhotos[0]) add(compPhotos[0].id, 'compartment', 'Compartment photo');
   if (input.parentVersion?.assetId) add(input.parentVersion.assetId, 'parent', 'Previous version');
   if (input.markupAsset?.id) add(input.markupAsset.id, 'markup', 'Markup (areas to change)');
+  for (const assetId of input.referenceAssetIds ?? []) {
+    const a = assets.get(assetId);
+    if (a) add(assetId, 'other', a.title || 'Reference');
+  }
   if (mode === 'reference') {
     const byAsset = new Map();
     for (const e of equipment) for (const id of e.referenceAssetIds) {

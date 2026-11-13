@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, test } from 'vitest';
 import { planAssociation, searchCandidates } from '../../shared/associations.js';
 import { ID_PATTERN } from '../../shared/contracts.js';
+import { newId } from '../../shared/ids.js';
 import { applyOps, assignedCounts, migrateV1toV2, projectV1 } from '../../shared/planner.js';
 import { counterIds, FOG, GRIPHOIST, JACK, THERMAL, VSTRUT, v1Fixture } from './fixtures.js';
 
@@ -136,9 +137,10 @@ describe('planAssociation', () => {
     const noSlots = planAssociation(full, 'LS3', [{ name: FOG, quantity: 2 }], ctx);
     expect(noSlots.errors).toEqual([{ index: 0, code: 'NO_SLOTS', message: expect.any(String) }]);
   });
-  test('non-array selections and default ctx work', () => {
+  test('non-array selections work without ctx; new tools need ctx.newId', () => {
     expect(planAssociation(doc, 'LS3', undefined)).toEqual({ links: [], plannerOps: [], errors: [] });
-    const r = planAssociation(doc, 'LS3', [{ quantity: 1, newTool: { name: 'Thing' } }]);
+    expect(() => planAssociation(doc, 'LS3', [{ quantity: 1, newTool: { name: 'Thing' } }])).toThrow(/ctx\.newId .* is required/);
+    const r = planAssociation(doc, 'LS3', [{ quantity: 1, newTool: { name: 'Thing' } }], { newId });
     expect(r.plannerOps[0].tool.equipmentId).toMatch(ID_PATTERN);
   });
 });

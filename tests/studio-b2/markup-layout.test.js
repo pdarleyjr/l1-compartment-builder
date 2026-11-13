@@ -3,7 +3,7 @@ import {
   arrowHead, clearAll, commit, defaultShape, drawShapes, emptyHistory, nudgeShape, redo, scaleShape, shapeFromDrag, toNormalized, undo,
 } from '../../src/studio/edit/markupModel.js';
 import { clampPan, clampScale, versionLabels, branchText, verificationHints, zoomAt, visibleVersions } from '../../src/studio/review/reviewModel.js';
-import { availableZones, diagramModel, itemsByZone, layoutDirty, normalizeLayout, placementOf, setPlacement, toolItems } from '../../src/studio/layout/layoutModel.js';
+import { availableZones, diagramModel, itemsByZone, layoutDirty, layoutPayload, normalizeLayout, placementOf, setPlacement, toolItems } from '../../src/studio/layout/layoutModel.js';
 import { photoCounts } from '../../src/studio/common/data.js';
 
 describe('markup geometry', () => {
@@ -90,11 +90,17 @@ describe('layout model', () => {
     const l2 = setPlacement(l1, item, { orientation: 'vertical' });
     expect(l2.placements).toHaveLength(1);
     expect(setPlacement(setPlacement(l2, item, { zone: null }), item, { orientation: null }).placements).toHaveLength(0);
+    expect(l1.placements).toEqual([{ targetType: 'equipment', targetId: 'eq_1', zone: 'left_wall' }]); // canonical shape
+    expect(l2.placements).toEqual([{ targetType: 'equipment', targetId: 'eq_1', zone: 'left_wall', orientation: 'vertical' }]);
+    expect(setPlacement(l0, { kind: 'mount', ref: 'mt_1', name: 'Bracket' }, { zone: 'floor' }).placements[0]).toEqual({ targetType: 'mount', targetId: 'mt_1', zone: 'floor' });
+    expect(layoutPayload(l2)).toEqual({ placements: l2.placements });
+    expect(layoutPayload({ ...l2, notes: 'n' }).notes).toBe('n');
     expect(layoutDirty(l0, l1)).toBe(true);
     expect(layoutDirty(l1, { ...l1, placements: [...l1.placements] })).toBe(false);
   });
   it('rejects bad orientations from the server', () => {
-    expect(normalizeLayout({ placements: [{ ref: 'x', zone: 'floor', orientation: 'upside-down' }] }).placements[0].orientation).toBeNull();
+    expect(normalizeLayout({ placements: [{ targetType: 'equipment', targetId: 'x', zone: 'floor', orientation: 'upside-down' }] }).placements[0]).toEqual({ targetType: 'equipment', targetId: 'x', zone: 'floor' });
+    expect(normalizeLayout({ placements: [{ kind: 'tool', ref: 'x', name: 'x', zone: 'floor' }] }).placements).toEqual([]); // pre-canonical shape dropped
   });
   it('builds a proportional diagram and flags unknown dimensions', () => {
     const wide = diagramModel({ dimensions: { widthIn: 80, heightIn: 16 } }, ['a', 'b']);
@@ -105,7 +111,7 @@ describe('layout model', () => {
     expect(diagramModel(null, ['a', 'b', 'c']).rects).toHaveLength(3);
   });
   it('offers geometry zones plus any already used', () => {
-    const l = { placements: [{ kind: 'tool', ref: 'x', name: 'x', zone: 'legacy', orientation: null }], notes: '' };
+    const l = { placements: [{ targetType: 'equipment', targetId: 'x', zone: 'legacy' }], notes: '' };
     expect(availableZones({ zones: ['floor'] }, l)).toEqual(['floor', 'legacy']);
     expect(availableZones(null, normalizeLayout(null))).toContain('upper_shelf');
     expect(itemsByZone(l, ['legacy']).legacy).toHaveLength(1);

@@ -99,29 +99,37 @@ describe('validateMount', () => {
 });
 
 describe('validateDesign', () => {
-  const placement = { targetType: 'equipment', targetId: EQ, zone: 'upper_shelf', orientation: 'vertical', x: 0.1, y: 0.2, w: 0.3, h: 0.4, notes: ' n ' };
-  test('nested and flat forms normalize identically', () => {
-    const layout = { zones: ['upper_shelf', 'floor'], placements: [placement], notes: ' hi ' };
-    const nested = okVal(validateDesign({ expectRevision: 2, layout }));
-    const flat = okVal(validateDesign({ expectRevision: 2, ...layout }));
-    expect(flat).toEqual(nested);
-    expect(nested.layout.placements[0].notes).toBe('n');
-    expect(nested.layout.notes).toBe('hi');
-    expect(okVal(validateDesign({ expectRevision: 0 }))).toEqual({ expectRevision: 0, layout: { zones: [], placements: [] } });
-    expect(okVal(validateDesign({ expectRevision: 1, placements: [{ targetType: 'bundle', targetId: 'k3j9x2a1', zone: 'floor' }] })).layout.placements[0].targetType).toBe('bundle');
+  const placement = { targetType: 'equipment', targetId: EQ, zone: 'upper_shelf', orientation: 'vertical', notes: ' n ' };
+  const body = (layout, rev = 1) => ({ expectRevision: rev, layout });
+  test('canonical {layout:{placements, notes?}, expectRevision} normalizes', () => {
+    const v = okVal(validateDesign(body({ placements: [placement], notes: ' hi ' }, 2)));
+    expect(v).toEqual({ expectRevision: 2, layout: { placements: [{ ...placement, notes: 'n' }], notes: 'hi' } });
+    expect(okVal(validateDesign(body({}, 0)))).toEqual({ expectRevision: 0, layout: { placements: [] } });
+    for (const targetType of ['assignment', 'equipment', 'mount']) {
+      expect(okVal(validateDesign(body({ placements: [{ targetType, targetId: ID, zone: 'floor' }] }))).layout.placements[0].targetType).toBe(targetType);
+    }
   });
   test.each([
-    ['missing revision', {}, /expectRevision/], ['negative revision', { expectRevision: -1 }, /expectRevision/], ['mixed forms', { expectRevision: 1, layout: {}, zones: [] }, /either nested or flat/],
-    ['unknown layout field', { expectRevision: 1, layout: { foo: 1 } }, /unknown field/], ['zones not array', { expectRevision: 1, zones: 'x' }, /zones/], ['bad zone', { expectRevision: 1, zones: ['Upper Shelf'] }, /zones\[0\]/],
-    ['too many zones', { expectRevision: 1, zones: Array(31).fill('a') }, /at most 30/], ['too many placements', { expectRevision: 1, placements: Array(301).fill(placement) }, /at most 300/],
-    ['bad target type', { expectRevision: 1, placements: [{ ...placement, targetType: 'asset' }] }, /targetType/], ['bad target id', { expectRevision: 1, placements: [{ ...placement, targetId: 'x' }] }, /targetId/],
-    ['bad bundle id', { expectRevision: 1, placements: [{ ...placement, targetType: 'bundle', targetId: 'A B' }] }, /targetId/], ['bad zone in placement', { expectRevision: 1, placements: [{ ...placement, zone: 'A B' }] }, /zone/],
-    ['bad orientation', { expectRevision: 1, placements: [{ ...placement, orientation: 'tilted' }] }, /orientation/], ['geometry > 1', { expectRevision: 1, placements: [{ ...placement, x: 2 }] }, /x/],
-    ['not object', 'x', /object/],
-  ])('rejects %s', (_n, body, re) => bad(validateDesign(body), re));
+    ['missing revision', { layout: {} }, /expectRevision/], ['negative revision', { expectRevision: -1, layout: {} }, /expectRevision/],
+    ['missing layout', { expectRevision: 1 }, /layout/], ['flat form (not canonical)', { expectRevision: 1, placements: [] }, /unknown field/],
+    ['unknown layout field', body({ foo: 1 }), /unknown field/], ['zones are not part of the layout', body({ zones: ['floor'] }), /unknown field zones/],
+    ['too many placements', body({ placements: Array(301).fill(placement) }), /at most 300/],
+    ['bundle is not placeable', body({ placements: [{ ...placement, targetType: 'bundle', targetId: 'k3j9x2a1' }] }), /targetType/],
+    ['bad target type', body({ placements: [{ ...placement, targetType: 'asset' }] }), /targetType/], ['bad target id', body({ placements: [{ ...placement, targetId: 'x' }] }), /targetId/],
+    ['bad zone in placement', body({ placements: [{ ...placement, zone: 'A B' }] }), /zone/], ['bad orientation', body({ placements: [{ ...placement, orientation: 'tilted' }] }), /orientation/],
+    ['geometry is not part of a placement', body({ placements: [{ ...placement, x: 0.5 }] }), /unknown field x/], ['not object', 'x', /object/],
+  ])('rejects %s', (_n, b, re) => bad(validateDesign(b), re));
 });
 
 describe('validateJobRequest', () => {
+  test('referenceAssetIds: up to 4 distinct asset ids', () => {
+    const ids = ['ast_0123456789abcdefghij012345', 'ast_1123456789abcdefghij012345', 'ast_2123456789abcdefghij012345', 'ast_3123456789abcdefghij012345'];
+    expect(okVal(validateJobRequest({ kind: 'render', mode: 'plan', referenceAssetIds: ids })).referenceAssetIds).toEqual(ids);
+    bad(validateJobRequest({ kind: 'render', referenceAssetIds: [...ids, ID] }), /at most 4/);
+    bad(validateJobRequest({ kind: 'render', referenceAssetIds: [ids[0], ids[0]] }), /repeat/);
+    bad(validateJobRequest({ kind: 'render', referenceAssetIds: ['x'] }), /referenceAssetIds\[0\]/);
+    bad(validateJobRequest({ kind: 'render', referenceAssetId: ids[0] }), /unknown field/);
+  });
   test('render and recognize', () => {
     expect(okVal(validateJobRequest({ kind: 'render', mode: 'reference', preset: 'high', instructions: '  brighter ', confirmEstimateUsd: 1.5 }))).toEqual({ kind: 'render', mode: 'reference', preset: 'high', instructions: 'brighter', confirmEstimateUsd: 1.5 });
     expect(okVal(validateJobRequest({ kind: 'render', mode: 'edit', parentVersionId: 'iv_0123456789abcdefghij012345', markupAssetId: ID })).parentVersionId).toBe('iv_0123456789abcdefghij012345');

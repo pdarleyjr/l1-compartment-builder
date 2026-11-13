@@ -31,11 +31,11 @@ export function SuggestionsPanel({ compId, assetId, onSuggestions, onConfirm }) 
     setStatus('running'); setMessage('Looking at the photo…');
     try {
       const res = await api(`/compartments/${encodeURIComponent(compId)}/jobs`, { method: 'POST', json: { kind: 'recognize', assetId }, idempotencyKey: newKey('recognize') });
-      let job = res.job ?? res;
+      let job = res.job;
       for (let i = 0; i < POLL_MAX && alive.current && !['completed', 'failed', 'cancelled'].includes(job.status); i += 1) {
         await new Promise(r => setTimeout(r, POLL_MS));
         const next = await api(`/jobs/${job.id}`);
-        job = next.job ?? next;
+        job = next.job;
       }
       if (!alive.current) return;
       if (job.status === 'failed' || job.status === 'cancelled') { setStatus('error'); setMessage(job.errorMessage || 'The suggestion request did not finish. You can still pick tools by hand.'); return; }

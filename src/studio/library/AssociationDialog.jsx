@@ -3,6 +3,7 @@ import { ApiError, api } from '../../lib/api.js';
 import { fetchSession } from '../../lib/session.js';
 import { effectiveInventory } from '../../../shared/planner.js';
 import { planAssociation, searchCandidates } from '../../../shared/associations.js';
+import { newId } from '../../../shared/ids.js';
 import { Modal } from '../capture/Modal.jsx';
 import { BTN_PRIMARY, BTN_SECONDARY, INPUT, ERROR_TEXT } from '../capture/styles.js';
 import { attachRegions, newRegion, rowKey, summarizePlan, toApiLink } from './association-summary.js';
@@ -15,11 +16,13 @@ const safe = (fn, fallback) => { try { return fn(); } catch { return fallback; }
 
 /**
  * “Which tools are in this photo?” Nothing is saved until “Save links”.
- * @param {{compId:string, asset:object|null, plannerDoc:object|null, open:boolean, onClose:()=>void, onSaved:(asset:object)=>void,
+ * `plannerRevision` is the revision of `plannerDoc` (from App's planner sync); it is the baseRevision of the planner ops.
+ * @param {{compId:string, asset:object|null, plannerDoc:object|null, plannerRevision?:number, open:boolean, onClose:()=>void, onSaved:(asset:object)=>void,
  *   session?:{aiEnabled?:boolean}}} props `session` is optional; when omitted the session is fetched once to learn aiEnabled.
  */
-export function AssociationDialog({ compId, asset, plannerDoc, open, onClose, onSaved, session }) {
+export function AssociationDialog({ compId, asset, plannerDoc, plannerRevision = 0, open, onClose, onSaved, session }) {
   const [doc, setDoc] = useState(plannerDoc);
+  const [revision, setRevision] = useState(plannerRevision);
   const [query, setQuery] = useState('');
   const [multi, setMulti] = useState(asset?.category === 'tool_group');
   const [selected, setSelected] = useState(() => new Map());
@@ -30,7 +33,7 @@ export function AssociationDialog({ compId, asset, plannerDoc, open, onClose, on
   const [notice, setNotice] = useState('');
   const [aiEnabled, setAiEnabled] = useState(!!session?.aiEnabled);
 
-  useEffect(() => { setDoc(plannerDoc); }, [plannerDoc]);
+  useEffect(() => { setDoc(plannerDoc); setRevision(plannerRevision); }, [plannerDoc, plannerRevision]);
   useEffect(() => { if (session) setAiEnabled(!!session.aiEnabled); else if (open) fetchSession().then(s => setAiEnabled(!!s.aiEnabled)); }, [session, open]);
 
   const names = useMemo(() => safe(() => effectiveInventory(doc), []), [doc]);
@@ -56,7 +59,7 @@ export function AssociationDialog({ compId, asset, plannerDoc, open, onClose, on
   const selections = useMemo(() => Array.from(selected.values()), [selected]);
   const plan = useMemo(() => {
     if (!selections.length) return null;
-    try { return planAssociation(doc, compId, selections.map(s => ({ equipmentId: s.equipmentId, name: s.name, quantity: s.quantity, newTool: s.newTool })), {}); }
+    try { return planAssociation(doc, compId, selections.map(s => ({ equipmentId: s.equipmentId, name: s.name, quantity: s.quantity, newTool: s.newTool })), { newId }); }
     catch (e) { return { links: [], plannerOps: [], errors: [{ index: 0, code: 'INVALID', message: e?.message || 'Could not plan these links.' }] }; }
   }, [doc, compId, selections]);
   const summary = useMemo(() => summarizePlan(plan, selections, freeByName), [plan, selections, freeByName]);
@@ -83,7 +86,7 @@ export function AssociationDialog({ compId, asset, plannerDoc, open, onClose, on
 
   const refreshDoc = async () => {
     const res = await api('/public/planner');
-    setDoc(res?.doc ? { ...res.doc, revision: res.revision ?? res.doc.revision } : res);
+    if (res?.doc) { setDoc(res.doc); setRevision(res.revision); }
   };
 
   const save = async () => {
@@ -91,7 +94,7 @@ export function AssociationDialog({ compId, asset, plannerDoc, open, onClose, on
     setSaving(true); setError(''); setNotice('');
     try {
       const links = [...attachRegions(plan.links, selections).map(toApiLink), ...keptLinks.map(toApiLink)];
-      const res = await api(`/assets/${asset.id}/links`, { method: 'POST', json: { links, plannerOps: plan.plannerOps, baseRevision: doc?.revision } });
+      const res = await api(`/assets/${asset.id}/links`, { method: 'POST', json: { links, plannerOps: plan.plannerOps, baseRevision: revision } });
       onSaved(res?.asset ?? asset);
     } catch (e) {
       if (e instanceof ApiError && e.status === 409) {

@@ -3,7 +3,7 @@ import { api } from '../../lib/api.js';
 import { onAssetsChanged } from './events.js';
 
 /** Normalize list responses ({assets:[…]} or a bare array). */
-export const unwrapAssets = r => (Array.isArray(r) ? r : r?.assets ?? []);
+export const unwrapAssets = r => r.assets;
 
 /**
  * Assets of one compartment (editor list, newest first as returned). Reloads when the capture panel commits.

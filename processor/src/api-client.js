@@ -29,7 +29,12 @@ export function createApiClient(cfg, opts = {}) {
   const wait = opts.sleepImpl || sleep;
   const origin = new URL(cfg.apiBase).origin;
 
-  const authHeaders = () => ({ 'CF-Access-Client-Id': cfg.accessClientId, 'CF-Access-Client-Secret': cfg.accessClientSecret });
+  const node = cfg.node ?? cfg.nodeName;
+  // Raw (non-JSON) processor endpoints cannot carry the node in a body, so every request identifies it with X-L1-Node.
+  const authHeaders = () => ({
+    'CF-Access-Client-Id': cfg.accessClientId, 'CF-Access-Client-Secret': cfg.accessClientSecret,
+    ...(node ? { 'X-L1-Node': String(node) } : {}),
+  });
 
   /** Only same-origin URLs are ever fetched, so Access credentials cannot leak elsewhere. */
   const resolveUrl = pathOrUrl => {

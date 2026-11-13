@@ -60,9 +60,8 @@ including keyboard and touch dropdown flows, read-only mode, two-device concurre
 edits, offline queue persistence, rename consistency, carousel main image and stale
 badge, Studio lazy loading and the error boundary, route and image health,
 inventory mutations, Excel export, 44-pixel interactive targets, horizontal
-overflow, and automated WCAG checks. While `shared/planner.js` is still the
-interface stub, `playwright.config.js` aliases it to `e2e/helpers/planner-shim.js`
-automatically. On workers where the default Chromium cannot start, the config falls
+overflow, and automated WCAG checks. The fake API in `e2e/helpers/fake-api.js` runs the
+real `shared/planner.js`. On workers where the default Chromium cannot start, the config falls
 back to the cached `chromium_headless_shell` (or set `L1_CHROMIUM_PATH`); run with
 `npx playwright test --trace off`.
 

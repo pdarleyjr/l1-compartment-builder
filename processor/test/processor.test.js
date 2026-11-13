@@ -64,6 +64,8 @@ test('render with references: multipart image[] parts, markup, upload variants, 
   assert.deepEqual([mm.width, mm.height, mm.format], [m0.width, m0.height, 'png']);
   const fields = Object.fromEntries(parts.filter(p => !p.filename).map(p => [p.name, p.data.toString()]));
   assert.equal(fields.model, 'gpt-image-2.6-flare'); assert.equal(fields.size, '1024x768'); assert.equal(fields.quality, 'low'); assert.equal(fields.complexity, 'medium'); assert.equal(fields.output_format, 'png');
+  // every request (JSON and raw downloads/uploads) identifies the node with X-L1-Node
+  assert.ok(s.w.calls.length > 5 && s.w.calls.every(c => c.headers['x-l1-node'] === 'test-node'));
   // status order and output
   const statuses = s.w.calls.filter(c => c.json?.status).map(c => c.json.status);
   assert.ok(statuses.indexOf('generating') > statuses.indexOf('preparing') && statuses.indexOf('saving') > statuses.indexOf('generating'));

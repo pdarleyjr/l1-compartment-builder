@@ -234,3 +234,63 @@ no new vendors or subscriptions.
 
 Audit reproduction tests belong to the part that fixes the finding; when a fix lands, remove the `fails` marker in the
 same change.
+
+## 15. API payloads (appendix — integration contract)
+
+Canonical request/response shapes after the integration pass. Producer and consumer are tested together by
+`tests/integration/**` (real Worker + real processor, no mocks of `shared/**` or `worker/src/**`); the typedef block at the
+end of `shared/contracts.js` is the machine-readable summary. Errors are always `{error:{code, message, details?}}`.
+Lists and details use **named envelopes**; clients never accept a bare array or an alternative envelope.
+
+| Area | Endpoint | Request | Response |
+|---|---|---|---|
+| Planner | `GET /api/public/planner[?since=rev]` | – | `{revision, migrated:boolean, doc}` always (doc = projectV1 + `equipmentIds` + `assignmentIds`; before migration `revision:0, migrated:false`, doc = legacy KV document or null). `304` + ETag `"<rev>"` when `since` equals the revision |
+| Planner | `POST /api/planner/ops` | `{baseRevision, clientOpId, ops}` | `{revision, doc, applied:[i], conflicts:[{index, reason, current}], deduped?}` |
+| Main image | `GET /api/public/main-images` | – | `{mainImages:{[compId]:MainImage}}` (only compartments with a row) |
+| Gallery | `GET /api/(public/)compartments/:id/gallery` | – | `{compartmentId, main:MainImage\|null, items:[{id, kind:'preset'\|'asset'\|'version', url, thumbUrl, title, provenance, status?}]}`; `id` is the `ref` that `POST main-image` accepts |
+| Main image | `POST …/main-image`, `…/main-image/restore` | `{kind, ref, expectRevision, acknowledgeStale?}` / `{expectRevision}` | `{main:MainImage}`; stale version → `409 STALE_SOURCE {details:{current, version}}` |
+| Assets | `GET …/assets` | – | `{assets:[Asset]}`; each Asset has `links` (confirmed + suggested, with `state`) |
+| Assets | `POST /api/assets` → `PUT …/:variant` → `POST …/commit` | commit `{links?, plannerOps?, baseRevision?}` | `{asset, plannerRevision?}`; stale quantity → `409 CONFLICT {details:{conflicts}}` and nothing is committed. `PATCH /api/assets/:id` needs `expectRevision` |
+| Mounts | `GET/POST …/mounts`, `PATCH /api/mounts/:id` | `{name, manufacturer?, model?, description?, dimensions?, orientation?, zone?, capacity?, classification, status, equipmentId?, notes?, links:[{targetType:'equipment'\|'assignment'\|'asset', targetId}]}` (+ `expectRevision` on PATCH) | `{mounts:[…]}` / `{mount}` with the same `links` |
+| Design | `GET/PUT …/design` | PUT `{layout, expectRevision}` | `{design:{compartmentId, revision, layout}}`; **layout** = `{placements:[{targetType:'assignment'\|'equipment'\|'mount', targetId, zone, orientation?, notes?}], notes?}` |
+| Jobs | `POST …/estimate` | job request | `{estimate:{usd, basis}, requiresConfirm, model, size}` |
+| Jobs | `POST …/jobs` (`Idempotency-Key`) | `{kind, mode?, preset?, instructions?, parentVersionId?, markupAssetId?, assetId?, referenceAssetIds?≤4, confirmEstimateUsd?}` | `202 {job, estimate:{usd, basis}}`; preset needing confirmation → `409 CONFLICT {details:{estimate:{usd, basis}, requiresConfirm:true}}`. `referenceAssetIds` = committed assets of the same compartment, become spec references with role `other` (label = asset title) |
+| Jobs | `GET …/jobs`, `GET /api/jobs/:id`, `POST …/cancel`, `POST …/retry` | – | `{jobs}`, `{job, version\|null}`, `{job}`, `202 {job, estimate}` |
+| Versions | `GET …/versions`, `PATCH /api/versions/:id` | `{status:'rejected'\|'deleted'}` | `{versions}`, `{version}` |
+| Usage | `GET /api/usage` | – | `{today, month, user:{spent, reserved, cap}, jobs, recent}` |
+| Admin | `GET /api/admin/settings` | – | `{settings:{[key]:{value, revision, default, updatedBy, updatedAt}}}` |
+| Admin | `PUT /api/admin/settings/:key` | `{value, expectRevision}` | `{key, value, revision}` |
+| Admin | `GET …/settings/:key/history`, `GET /api/admin/audit` | – | `{key, history:[{revision, value, updatedBy, updatedAt}]}`, `{entries:[{id, at, actor, action, entityType, entityId, detail}]}` |
+
+**Processor claim** (`POST /api/processor/claim` → `200`, or `204`):
+
+```json
+{
+  "job": { "id": "gj_…", "kind": "render|recognize|verify", "mode": "plan|reference|edit|null", "model": "…", "quality": "…",
+           "complexity": "…", "size": "1200x2560", "outputFormat": "jpeg|png|webp", "prompt": "…", "attempts": 1, "moderation": "auto" },
+  "spec": { "schema": "l1.scene/1", "…": "…" },
+  "references": [ { "assetId": "ast_…", "url": "/api/processor/assets/ast_…/original?job=gj_…",
+                    "role": "compartment|parent|markup|tool|mount|arrangement|other|subject", "label": "…", "sheet": null } ],
+  "maxReferences": 10,
+  "leaseExpiresAt": 1700000000000
+}
+```
+
+* Contact-sheet items are **flattened into `references`**; `sheet` carries the sheet label (`null` = send directly). The
+  processor groups by `sheet`, builds each contact sheet and counts it as one image against `maxReferences`.
+* `recognize`/`verify`: the photo is a reference with role `subject`; `spec.candidates = [{equipmentId, name}]` is the
+  effective inventory (recognition may only suggest these).
+* Raw endpoints (asset download, output upload) have no JSON body, so the processor identifies itself with the header
+  **`X-L1-Node`** on every request. The lease check compares it with the claiming node.
+* `complete` carries the provider `usage` **snake_case, verbatim** (Images API: `input_tokens`, `output_tokens`,
+  `input_tokens_details:{text_tokens, image_tokens, cached_tokens?}`); the Worker prices it with
+  `shared/cost.js actualCost` and settles the ledger with that actual cost.
+* `fail` with `code:'CANCELLED'` ends the job as `cancelled` (ledger released when `providerCalled` is false). A lease that
+  expires after `generating` ends as `failed/OUTCOME_UNKNOWN`, settled at the estimate, never requeued.
+
+**Association planning.** `planAssociation(doc, compId, selections, {newId})` — callers pass `newId` from `shared/ids.js`;
+it throws a clear error when a selection creates a new tool and `newId` is missing. The planner `baseRevision` sent with
+the ops is the app's `plannerRevision` (planner sync), forwarded as a prop `StudioShell → CapturePanel / AssetLibrary /
+AssociationDialog / MountsPanel`; it is not a field of the planner document.
+
+**Studio entry.** `StudioShell` accepts the optional prop `initialStep` (`photos|tools|mounts|arrange|generate|review|publish`).

@@ -97,7 +97,7 @@ describe('setMainImage', () => {
     const pub = await jsonOf(await pubGallery('LS1'));
     expect(pub.main.ref).toBe('iv_1');
     expect(pub.items.some(i => i.assetId === 'ast_r')).toBe(true);
-    expect((await jsonOf(await call(gallery.getMainImages, t.env, { actor: anon }))).LS1.kind).toBe('version');
+    expect((await jsonOf(await call(gallery.getMainImages, t.env, { actor: anon }))).mainImages.LS1.kind).toBe('version');
   });
 
   it('a stale version needs acknowledgeStale: 409 STALE_SOURCE with both fingerprints, then publishes when acknowledged', async () => {
@@ -120,7 +120,7 @@ describe('setMainImage', () => {
     insertAsset(t, 'ast_r', 'LS1', { category: 'rendering', provenance: 'ai_concept' });
     insertVersion(t, 'iv_1', 'LS1', 'ast_r', { fingerprint: await fpOf('LS1') });
     await setMain('LS1', { kind: 'version', ref: 'iv_1' });
-    const all = async () => (await jsonOf(await call(gallery.getMainImages, t.env, { actor: anon }))).LS1.stale;
+    const all = async () => (await jsonOf(await call(gallery.getMainImages, t.env, { actor: anon }))).mainImages.LS1.stale;
     expect(await all()).toBe(false);
     const doc = JSON.parse(t.db.one('SELECT doc FROM planner_doc').doc);
     doc.allocations.LS1[7] = 'Hose'; doc.assignmentIds.LS1[7] = 'as_new';
@@ -208,7 +208,7 @@ describe('restorePreviousMainImage', () => {
     insertAsset(t, 'ast_p', 'LS1');
     await setMain('LS1', { kind: 'asset', ref: 'ast_p' });
     t.db.sqlite.prepare("UPDATE assets SET status = 'deleted' WHERE id = 'ast_p'").run();
-    expect(await jsonOf(await call(gallery.getMainImages, t.env, { actor: anon }))).toEqual({});
+    expect(await jsonOf(await call(gallery.getMainImages, t.env, { actor: anon }))).toEqual({ mainImages: {} });
     expect(EQ.axe).toBeTruthy();
   });
 });

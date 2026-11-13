@@ -45,22 +45,26 @@ async function buildClaim(db, job) {
   const spec = parseJson(job.spec, {});
   delete spec.request;
   const allowed = new Set([...parseJson(job.reference_asset_ids, []), job.subject_asset_id].filter(Boolean));
-  let references; let contactSheets = [];
+  const { 'references.maxPerRequest': configuredMax } = await getSettings(db, ['references.maxPerRequest']);
+  const maxReferences = configuredMax ?? 10;
+  let references;
   if (job.kind === 'recognize') {
-    references = [{ assetId: job.subject_asset_id, variant: 'original', role: 'subject', label: 'Photo to identify', url: assetPath(job.subject_asset_id, job.id) }];
+    references = [{ assetId: job.subject_asset_id, url: assetPath(job.subject_asset_id, job.id), role: 'subject', label: 'Photo to identify', sheet: null }];
   } else {
-    const { 'references.maxPerRequest': max } = await getSettings(db, ['references.maxPerRequest']);
-    const sel = selectReferences(spec, max ?? 10);
-    const mk = r => ({ assetId: r.assetId, variant: 'original', role: r.role, label: r.label, url: assetPath(r.assetId, job.id) });
-    references = sel.direct.filter(r => allowed.has(r.assetId)).map(mk);
-    contactSheets = (sel.contactSheets || []).map(s => ({ label: s.label, items: (s.items || []).filter(i => allowed.has(i.assetId)).map(i => ({ assetId: i.assetId, label: i.label, url: assetPath(i.assetId, job.id) })) }));
+    const sel = selectReferences(spec, maxReferences);
+    const mk = (r, sheet) => ({ assetId: r.assetId, url: assetPath(r.assetId, job.id), role: r.role ?? 'other', label: r.label ?? null, sheet });
+    // Contact-sheet items are flattened into references; `sheet` carries the sheet label (null = send directly).
+    references = [
+      ...sel.direct.filter(r => allowed.has(r.assetId)).map(r => mk(r, null)),
+      ...(sel.contactSheets || []).flatMap(s => (s.items || []).filter(i => allowed.has(i.assetId)).map(i => mk({ ...i, role: i.role ?? 'other' }, s.label))),
+    ];
   }
   return {
     job: {
       id: job.id, kind: job.kind, mode: job.mode, model: job.model, quality: job.quality, complexity: job.complexity, size: job.size,
-      outputFormat: job.output_format, prompt: job.prompt, attempts: job.attempts,
+      outputFormat: job.output_format, prompt: job.prompt, attempts: job.attempts, moderation: 'auto',
     },
-    spec, references, contactSheets, leaseExpiresAt: job.lease_expires_at,
+    spec, references, maxReferences, leaseExpiresAt: job.lease_expires_at,
   };
 }
 
@@ -271,7 +275,7 @@ export async function fail({ request, env, db, params, now }) {
   const code = String(body.code || 'PROCESSOR_ERROR').slice(0, 64);
   const providerCalled = body.providerCalled === true;
   const message = humanFailure(code, body.message);
-  const cancelled = !!job.cancel_requested;
+  const cancelled = !!job.cancel_requested || code === 'CANCELLED';
   const requeue = !cancelled && body.retryable === true && !providerCalled && job.attempts < job.max_attempts;
   const guard = "WHERE id = ? AND lease_owner = ? AND status IN ('claimed','preparing','generating','saving')";
   const audit = { actor: SERVICE_AUDIT, action: requeue ? 'job.requeue' : 'job.fail', entityType: 'job', entityId: job.id, detail: { code, providerCalled, requeue } };

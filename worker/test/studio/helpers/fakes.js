@@ -83,9 +83,12 @@ export const validationFake = {
     for (const k of ['title', 'notes', 'category']) if (b[k] !== undefined) v[k] = b[k];
     return ok(v);
   },
-  validateLinks(links) {
+  // Mirrors shared/validation.js: the argument is the whole body {links?, plannerOps?, baseRevision?}.
+  validateLinks(body) {
+    if (!body || typeof body !== 'object' || Array.isArray(body)) return bad('body must be an object');
+    const links = body.links ?? [];
     if (!Array.isArray(links)) return bad('links must be a list');
-    return ok(links.map(l => ({ targetType: l.targetType, targetId: l.targetId, quantity: l.quantity, region: l.region })));
+    return ok({ links: links.map(l => ({ targetType: l.targetType, targetId: l.targetId, quantity: l.quantity ?? 1, region: l.region ?? null })), plannerOps: body.plannerOps ?? [], baseRevision: body.baseRevision });
   },
   validateMount(b, { partial = false } = {}) {
     if (!partial && !b.name) return bad('name is required');
@@ -93,9 +96,16 @@ export const validationFake = {
     for (const k of ['name', 'manufacturer', 'model', 'description', 'dimensions', 'orientation', 'zone', 'capacity', 'classification', 'status', 'equipmentId', 'notes']) if (b[k] !== undefined) v[k] = b[k];
     return ok(v);
   },
+  // Mirrors the canonical contract: {layout:{placements:[{targetType, targetId, zone, orientation?, notes?}], notes?}, expectRevision}.
   validateDesign(b) {
-    if (!b.layout || !Array.isArray(b.layout.placements || [])) return bad('layout.placements must be a list');
-    return ok({ layout: b.layout });
+    const l = b?.layout;
+    if (!l || typeof l !== 'object' || Array.isArray(l) || Object.keys(l).some(k => !['placements', 'notes'].includes(k))) return bad('layout must be {placements, notes?}');
+    const placements = l.placements ?? [];
+    if (!Array.isArray(placements)) return bad('layout.placements must be a list');
+    for (const p of placements) {
+      if (!['assignment', 'equipment', 'mount'].includes(p?.targetType) || typeof p.targetId !== 'string' || typeof p.zone !== 'string') return bad('invalid placement');
+    }
+    return ok({ expectRevision: b.expectRevision, layout: { ...l, placements } });
   },
   validateJobRequest(b) {
     if (!['render', 'recognize'].includes(b?.kind)) return bad('kind must be render or recognize');
@@ -140,7 +150,7 @@ export const plannerModuleFake = {
     });
     const revision = applied.length ? row.revision + 1 : row.revision;
     const statements = applied.length
-      ? [db.prepare("UPDATE planner_doc SET revision = ?, doc = ?, updated_at = ?, updated_by = ? WHERE id = 'main' AND revision = ?").bind(revision, JSON.stringify(doc), now, actor, row.revision)]
+      ? [db.prepare("UPDATE planner_doc SET revision = ?, doc = ?, updated_at = ?, updated_by = ? WHERE id = 'main' AND revision = ?").bind(revision, JSON.stringify(doc), now, actor?.email ?? actor?.serviceId ?? actor, row.revision)]
       : [];
     doc.__rev = revision;
     return { statements, result: { revision, doc, applied, conflicts } };

@@ -7,7 +7,6 @@ import { ACTIVE_JOB_STATES } from '../../shared/contracts.js';
 /** @typedef {import('../../shared/contracts.js')} Contract */
 
 const enc = encodeURIComponent;
-const list = (v, key) => (Array.isArray(v) ? v : Array.isArray(v?.[key]) ? v[key] : []);
 
 // ── API calls ────────────────────────────────────────────────────────────────────────────────────────────────────────
 /**
@@ -23,34 +22,35 @@ export async function createJob(compId, body, idempotencyKey = attemptKey(compId
 }
 /** @param {string} jobId @param {AbortSignal} [signal] @returns {Promise<object>} the job */
 export async function getJob(jobId, signal) {
-  const res = await api(`/jobs/${enc(jobId)}`, { signal });
-  return res?.job ?? res;
+  return (await api(`/jobs/${enc(jobId)}`, { signal })).job;
 }
 /** @param {string} compId @param {AbortSignal} [signal] @returns {Promise<object[]>} */
 export async function listJobs(compId, signal) {
-  return list(await api(`/compartments/${enc(compId)}/jobs`, { signal }), 'jobs');
+  return (await api(`/compartments/${enc(compId)}/jobs`, { signal })).jobs;
 }
 /** @param {string} jobId @returns {Promise<object>} */
 export async function cancelJob(jobId) {
-  const res = await api(`/jobs/${enc(jobId)}/cancel`, { method: 'POST', json: {} });
-  return res?.job ?? res;
+  return (await api(`/jobs/${enc(jobId)}/cancel`, { method: 'POST', json: {} })).job;
 }
 /** Explicit retry; reserves budget again, so it gets its own idempotency key. @param {string} jobId */
 export async function retryJob(jobId) {
   return api(`/jobs/${enc(jobId)}/retry`, { method: 'POST', json: {}, idempotencyKey: newKey('retry') });
 }
-/** Cost estimate for a render request. @returns {Promise<{usd:number, basis?:string}>} */
+/**
+ * Cost estimate for a render request (POST estimate → {estimate:{usd, basis}, requiresConfirm}).
+ * @returns {Promise<{usd:number, basis:string, requiresConfirm:boolean}>}
+ */
 export async function estimate(compId, body, signal) {
-  return api(`/compartments/${enc(compId)}/estimate`, { method: 'POST', json: body, signal });
+  const res = await api(`/compartments/${enc(compId)}/estimate`, { method: 'POST', json: body, signal });
+  return { ...res.estimate, requiresConfirm: res.requiresConfirm === true };
 }
 /** @param {string} compId @returns {Promise<object[]>} ImageVersion[] */
 export async function listVersions(compId, signal) {
-  return list(await api(`/compartments/${enc(compId)}/versions`, { signal }), 'versions');
+  return (await api(`/compartments/${enc(compId)}/versions`, { signal })).versions;
 }
 /** Reject / soft-delete a draft. @param {string} versionId @param {{status:'rejected'|'deleted'}} patch */
 export async function updateVersion(versionId, patch) {
-  const res = await api(`/versions/${enc(versionId)}`, { method: 'PATCH', json: patch });
-  return res?.version ?? res;
+  return (await api(`/versions/${enc(versionId)}`, { method: 'PATCH', json: patch })).version;
 }
 
 // ── Status text ──────────────────────────────────────────────────────────────────────────────────────────────────────

@@ -93,3 +93,25 @@ describe('actualCost', () => {
     expect(act).toBeGreaterThan(est / 10);
   });
 });
+
+describe('actualCost with the documented provider usage shapes (snake_case, exactly as returned)', () => {
+  // Images API (gpt-image-*): https://platform.openai.com/docs/api-reference/images/object — usage on every generate/edit response.
+  const imagesUsage = { total_tokens: 100, input_tokens: 50, output_tokens: 50, input_tokens_details: { text_tokens: 10, image_tokens: 40 } };
+  test('Images API usage: text in + image in + image out at the price table rates', () => {
+    expect(actualCost(imagesUsage, FLARE, P)).toBeCloseTo((10 * 5 + 40 * 8 + 50 * 30) / 1e6, 10); // $0.00187
+    expect(actualCost(imagesUsage, FLARE, P)).toBe(0.00187);
+  });
+  test('Images API usage with cached input tokens charges the cached image rate for them', () => {
+    const cached = { ...imagesUsage, input_tokens_details: { ...imagesUsage.input_tokens_details, cached_tokens: 30 } };
+    expect(actualCost(cached, FLARE, P)).toBeCloseTo((10 * 5 + 10 * 8 + 30 * 2 + 50 * 30) / 1e6, 10);
+  });
+  test('Responses API usage (recognition model): input_tokens_details has only cached_tokens', () => {
+    const responses = { input_tokens: 1200, input_tokens_details: { cached_tokens: 200 }, output_tokens: 80, output_tokens_details: { reasoning_tokens: 0 }, total_tokens: 1280 };
+    expect(actualCost(responses, 'gpt-5.4-mini', P)).toBeCloseTo((1000 * 0.75 + 200 * 0.075 + 80 * 4.5) / 1e6, 10);
+  });
+  test('camelCase or malformed usage is not silently priced', () => {
+    expect(actualCost({ inputTokens: 5, outputTokens: 5 }, FLARE, P)).toBeNull();
+    expect(actualCost({ input_tokens: 'many', output_tokens: 1 }, FLARE, P)).toBeNull();
+    expect(actualCost(null, FLARE, P)).toBeNull();
+  });
+});

@@ -52,7 +52,7 @@ export function splitReferences(references, maxPerRequest) {
   for (let i = 0; i < inSheets.length; i += SHEET_SIZE) {
     contactSheets.push({
       label: `Contact sheet ${contactSheets.length + 1} of ${sheetCount}`,
-      items: inSheets.slice(i, i + SHEET_SIZE).map(r => ({ assetId: r.assetId, label: r.label })),
+      items: inSheets.slice(i, i + SHEET_SIZE).map(r => ({ assetId: r.assetId, role: r.role, label: r.label })),
     });
   }
   const directEquipment = new Set(direct.flatMap(r => r.equipmentIds));

@@ -1,6 +1,5 @@
 // Photo ↔ inventory association rules (architecture §7). A photo is evidence, never inventory.
 import { ID_PREFIX } from './contracts.js';
-import { newId as defaultNewId } from './ids.js';
 import { assignedCounts, effectiveInventory } from './lib/doc.js';
 
 const norm = s => String(s ?? '').toLowerCase();
@@ -52,11 +51,15 @@ export function searchCandidates(doc, compId, query) {
  * emits nothing and reports an error {index, code:'QUANTITY'|'NO_SLOTS'|'NOT_FOUND'|'INVALID', message}.
  * @param {object} doc @param {string} compId
  * @param {{equipmentId?:string, name?:string, quantity:number, newTool?:{name:string, qty?:number, dimensions?:string, description?:string}}[]} selections
- * @param {{newId?:(prefix:string)=>string}} [ctx]
+ * @param {{newId?:(prefix:string)=>string}} [ctx] callers pass {newId} from shared/ids.js; required only for newTool selections
  * @returns {{links:object[], plannerOps:object[], errors:{index:number, code:string, message:string}[]}}
  */
 export function planAssociation(doc, compId, selections, ctx = {}) {
-  const mint = ctx.newId ?? defaultNewId;
+  // ids are minted by the caller (shared/ids.js newId) so plans stay deterministic and testable
+  const mint = prefix => {
+    if (typeof ctx.newId !== 'function') throw new TypeError('planAssociation: ctx.newId (from shared/ids.js) is required when a selection creates a new tool');
+    return ctx.newId(prefix);
+  };
   const links = [];
   const plannerOps = [];
   const errors = [];

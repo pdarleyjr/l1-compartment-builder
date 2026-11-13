@@ -12,7 +12,7 @@ export const ORIENTATION_LABELS = Object.freeze({ vertical: 'Vertical', horizont
 export { MOUNT_CLASSIFICATIONS, MOUNT_STATUSES };
 
 /** @returns {object} blank form state */
-export const emptyMount = () => ({ name: '', manufacturer: '', model: '', description: '', dimensions: '', orientation: '', zone: '', capacity: '', classification: 'mounting', status: 'proposed', assetId: null, equipmentIds: [] });
+export const emptyMount = () => ({ name: '', manufacturer: '', model: '', description: '', dimensions: '', orientation: '', zone: '', capacity: '', classification: 'mounting', status: 'proposed', equipmentId: '', assetId: null, equipmentIds: [] });
 
 /** Mount (API shape, links as [{targetType,targetId}]) → form state. */
 export function mountToForm(m) {
@@ -20,7 +20,7 @@ export function mountToForm(m) {
   return {
     name: m.name ?? '', manufacturer: m.manufacturer ?? '', model: m.model ?? '', description: m.description ?? '', dimensions: m.dimensions ?? '',
     orientation: m.orientation ?? '', zone: m.zone ?? '', capacity: m.capacity == null ? '' : String(m.capacity),
-    classification: m.classification ?? 'mounting', status: m.status ?? 'proposed',
+    classification: m.classification ?? 'mounting', status: m.status ?? 'proposed', equipmentId: m.equipmentId ?? '',
     assetId: links.find(l => l.targetType === 'asset')?.targetId ?? m.assetId ?? null,
     equipmentIds: links.filter(l => l.targetType === 'equipment').map(l => l.targetId),
   };
@@ -33,7 +33,7 @@ export function formToPayload(f) {
   return {
     name: n(f.name), manufacturer: n(f.manufacturer), model: n(f.model), description: n(f.description), dimensions: n(f.dimensions),
     orientation: f.orientation || null, zone: f.zone || null, capacity: Number.isFinite(cap) && cap >= 0 ? cap : null,
-    classification: f.classification, status: f.status,
+    classification: f.classification, status: f.status, equipmentId: f.classification === 'inventory' ? (f.equipmentId || null) : null,
     links: [...(f.assetId ? [{ targetType: 'asset', targetId: f.assetId }] : []), ...f.equipmentIds.map(id => ({ targetType: 'equipment', targetId: id }))],
   };
 }
@@ -42,5 +42,6 @@ export function formToPayload(f) {
 export function validateMountForm(f) {
   if (!f.name.trim()) return 'Give the mount a name.';
   if (f.capacity !== '' && !(parseInt(f.capacity, 10) >= 0)) return 'Capacity must be a whole number, 0 or more.';
+  if (f.classification === 'inventory' && !f.equipmentId) return 'Choose the inventory item this mount is.';
   return '';
 }

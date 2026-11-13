@@ -5,7 +5,6 @@ import { compartmentAssignments } from '../../../shared/planner.js';
 import { compartmentGeometry } from '../../../shared/apparatus-render.js';
 import { toolItems } from '../layout/layoutModel.js';
 
-const arr = (v, k) => (Array.isArray(v) ? v : Array.isArray(v?.[k]) ? v[k] : []);
 
 /** Safe wrapper: part C's functions may throw on odd input. */
 function safe(fn, fallback) { try { return fn() ?? fallback; } catch { return fallback; } }
@@ -50,7 +49,7 @@ export function useCompartmentData(compId, plannerDoc) {
         api(`/compartments/${encodeURIComponent(compId)}/assets`),
         api(`/compartments/${encodeURIComponent(compId)}/mounts`),
       ]);
-      setAssets(arr(a, 'assets')); setMounts(arr(m, 'mounts')); setError(null);
+      setAssets(a.assets); setMounts(m.mounts); setError(null);
     } catch (e) { setError(e); } finally { setLoading(false); }
   }, [compId]);
   useEffect(() => { setLoading(true); refresh(); }, [refresh]);

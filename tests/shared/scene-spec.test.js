@@ -83,6 +83,14 @@ describe('buildSceneSpec', () => {
     expect(spec.equipment.every(e => e.referenceAssetIds.length === 0)).toBe(true);
     expect(spec.mounts[0].referenceAssetIds).toEqual([]);
   });
+  test('referenceAssetIds become role "other" references (label = title) in every mode; foreign/deleted ones are ignored', async () => {
+    const extra = [asset('ast_sheet000000000000001', 'other', { title: 'Manufacturer sheet' }), asset('ast_notitle00000000000001', 'other')];
+    const plan = await buildSceneSpec(input({ mode: 'plan', assets: [...input().assets, ...extra], referenceAssetIds: ['ast_sheet000000000000001', 'ast_notitle00000000000001', 'ast_elsewhere000000000001', 'ast_gone0000000000000001'] }));
+    expect(plan.references.map(r => [r.role, r.label])).toEqual([['compartment', 'Compartment photo'], ['other', 'Manufacturer sheet'], ['other', 'Reference']]);
+    expect(plan.references.find(r => r.label === 'Manufacturer sheet').assetId).toBe('ast_sheet000000000000001');
+    const { direct } = selectReferences(plan, 10);
+    expect(direct.map(r => r.role)).toEqual(['compartment', 'other', 'other']);
+  });
   test('edit mode: compartment + parent + markup, parent version id recorded', async () => {
     const spec = await buildSceneSpec(input({ mode: 'edit', parentVersion: { id: 'iv_aaaaaaaaaaaaaaaaaaaaaaaaaa', assetId: 'ast_render00000000000001' }, markupAsset: { id: 'ast_markup0000000000001' }, instructions: 'Move the struts' }));
     expect(spec.references.map(r => r.role)).toEqual(['compartment', 'parent', 'markup']);

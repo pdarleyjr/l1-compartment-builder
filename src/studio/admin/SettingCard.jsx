@@ -30,8 +30,7 @@ export default function SettingCard({ settingKey, entry, onSaved, onReload }) {
     setSaving(true); setServerErrors([]);
     try {
       const res = await api(`/admin/settings/${enc(settingKey)}`, { method: 'PUT', json: { value: next, expectRevision: entry.revision } });
-      const rev = Number(res?.revision ?? res?.setting?.revision ?? entry.revision + 1);
-      onSaved(settingKey, { value: next, revision: rev }); toast(`${meta.label} saved.`, 'success');
+      onSaved(settingKey, { value: res.value, revision: res.revision }); toast(`${meta.label} saved.`, 'success');
     } catch (e) {
       if (e?.code === 'REVISION_CONFLICT' || e?.status === 409) { toast('Someone else changed this setting. The latest value was loaded.', 'error'); onReload(); }
       else setServerErrors([...(Array.isArray(e?.details?.errors) ? e.details.errors.map(String) : []), humanError(e)].slice(0, 6));
@@ -66,7 +65,7 @@ export default function SettingCard({ settingKey, entry, onSaved, onReload }) {
           {history.length === 0 && <li className="p-2 text-slate-600">No earlier versions.</li>}
           {history.slice(0, 10).map(h => (
             <li key={h.revision} className="p-2 flex flex-wrap items-center gap-2">
-              <span className="font-bold">r{h.revision}</span><span className="text-slate-600">{h.changedBy ?? ''} {formatWhen(h.changedAt)}</span>
+              <span className="font-bold">r{h.revision}</span><span className="text-slate-600">{h.updatedBy ?? ''} {formatWhen(h.updatedAt)}</span>
               <span className="flex-1 min-w-0 break-all text-slate-800">{showValue(h.value)}</span>
               <button type="button" disabled={saving || JSON.stringify(h.value) === JSON.stringify(entry.value) || validateSetting(settingKey, h.value).length > 0} onClick={() => put(h.value)}
                 className="touch-target px-2 rounded border border-slate-300 font-semibold disabled:opacity-40">Restore this version</button>
