@@ -82,7 +82,8 @@ export default function StudioShell({ compId, session, plannerDoc, plannerRevisi
   const steps = STEPS.map(s => ({ ...s, badge: s.id === 'tools' && missing ? missing : null }));
   const current = STEPS.find(s => s.id === step);
 
-  const go = id => { setView('steps'); setStep(id); if (id === 'review') setReviewMode('review'); };
+  // Photos, links and mounts are edited inside steps, so every step change reloads the shared data (otherwise Arrange/Generate miss new mounts).
+  const go = id => { setView('steps'); setStep(id); data.refresh(); if (id === 'review') setReviewMode('review'); };
   const openResult = job => { if (job?.resultVersionId) setSelectedId(job.resultVersionId); versions.refresh(); setReviewMode('review'); go('review'); };
 
   const admin = session?.isAdmin;
@@ -117,7 +118,7 @@ export default function StudioShell({ compId, session, plannerDoc, plannerRevisi
   }
 
   const adminButton = admin && enabled ? (
-    <button type="button" onClick={() => setView(v => (v === 'admin' ? 'steps' : 'admin'))} data-testid="studio-admin-entry" aria-pressed={view === 'admin'}
+    <button type="button" onClick={() => setView(v => (v === 'admin' ? 'steps' : 'admin'))} data-testid="studio-admin-entry" aria-pressed={view === 'admin'} aria-label={view === 'admin' ? 'Back to the Studio steps' : 'Admin settings'}
       className="touch-target px-2.5 rounded text-sm font-semibold flex items-center gap-1.5 text-slate-200 hover:bg-slate-700"><Settings size={16} /> <span className="hidden sm:inline">{view === 'admin' ? 'Back' : 'Admin'}</span></button>
   ) : null;
 

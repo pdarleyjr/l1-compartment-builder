@@ -113,13 +113,13 @@ export default function ArrangeStep({ compId, tools, mounts, geometry }) {
                   <span className="text-[10px] uppercase tracking-wide text-slate-500 mr-1">{it.kind}</span>{it.name}
                 </div>
                 <label className="text-xs text-slate-600 flex flex-col">Zone
-                  <select value={p.zone ?? ''} onChange={e => place(it, { zone: e.target.value || null })} id={`zone-${id}`} className="touch-target border border-slate-300 rounded px-1.5 text-sm text-slate-900 bg-white">
+                  <select value={p.zone ?? ''} onChange={e => place(it, { zone: e.target.value || null })} id={`zone-${id}`} disabled={phase === 'loading'} className="touch-target border border-slate-300 rounded px-1.5 text-sm text-slate-900 bg-white">
                     <option value="">Not placed</option>
                     {zones.map(z => <option key={z} value={z}>{zoneLabel(z)}</option>)}
                   </select>
                 </label>
                 <label className="text-xs text-slate-600 flex flex-col">Orientation
-                  <select value={p.orientation ?? ''} onChange={e => place(it, { orientation: e.target.value || null })} className="touch-target border border-slate-300 rounded px-1.5 text-sm text-slate-900 bg-white">
+                  <select value={p.orientation ?? ''} disabled={phase === 'loading'} onChange={e => place(it, { orientation: e.target.value || null })} className="touch-target border border-slate-300 rounded px-1.5 text-sm text-slate-900 bg-white">
                     <option value="">Any</option>
                     {ORIENTATIONS.map(o => <option key={o} value={o}>{ORIENTATION_LABELS[o]}</option>)}
                   </select>
@@ -129,7 +129,7 @@ export default function ArrangeStep({ compId, tools, mounts, geometry }) {
           })}
         </ul>
         <label className="block text-sm font-semibold text-slate-800">Notes for the image
-          <textarea value={layout.notes} maxLength={INSTRUCTIONS_MAX} rows={3} onChange={e => setLayout(l => ({ ...l, notes: e.target.value }))}
+          <textarea value={layout.notes} disabled={phase === 'loading'} maxLength={INSTRUCTIONS_MAX} rows={3} onChange={e => setLayout(l => ({ ...l, notes: e.target.value }))}
             className="mt-1 w-full border border-slate-300 rounded p-2 text-sm font-normal" placeholder="e.g. Hose rolls stand upright against the rear wall." />
           <span className="text-xs font-normal text-slate-500">{layout.notes.length}/{INSTRUCTIONS_MAX}</span>
         </label>
