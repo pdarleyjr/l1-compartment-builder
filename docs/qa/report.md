@@ -66,11 +66,11 @@ image, 11 stale badge (taken from the LS2 flow).
 | U-01 | Medium | New mounts/link edits not visible in Arrange/Generate until the Studio was reopened | **Fixed** (`StudioShell.jsx`), regression test |
 | U-02 | High (layout feature) | Arrange discarded zone picks made while the saved layout was loading | **Fixed** (`ArrangeStep.jsx`), regression test |
 | U-03 | Medium | Admin button had no accessible name on phones (axe `button-name`, critical) | **Fixed** (`StudioShell.jsx`), axe regression on phone |
-| Q-01 | Low | `vite.config.js` proxy `changeOrigin:false` → every browser mutation 403 against `wrangler dev` | Reported, owner A (QA uses its own Vite config) |
+| Q-01 | Low | `vite.config.js` proxy `changeOrigin:false` → every browser mutation 403 against `wrangler dev` | Fixed by lead after QA (`changeOrigin: true` in `vite.config.js`) |
 | Q-02 | Low | `eslint .` lints wrangler's generated `worker/.wrangler/tmp` | Reported, lead (teardown removes it) |
 | Q-03 | Low | Port 8787 busy on aiw-k8 | Worked around (configurable ports) |
 | Q-04 | Low | Default `playwright test` would pick up Studio specs | Fixed (`*.qa.js`) |
-| Q-05 | Low | Flaky touch-target test sampled during the drawer transition | Reported, owner A |
+| Q-05 | Low | Flaky touch-target test sampled during the drawer transition | Fixed by lead after QA (test waits for CSS transitions to settle) |
 | – | – | Backend / shared / security | none found; 6 adversarial probes pass |
 
 Both UI fixes were verified by reverting `src/**`: the regression tests then fail (U-01 `a mount added…`, U-02 `Arrange keeps an early zone choice…`,

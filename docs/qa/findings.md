@@ -36,7 +36,7 @@ Regression: `cross-cutting.qa.js` axe test on the `phone` project (fails without
 
 ## Tooling / environment issues (Reported)
 
-### Q-01 (Low, Reported — owner A, `vite.config.js`) `L1_API_PROXY` with `changeOrigin:false` makes every browser mutation fail against `wrangler dev`
+### Q-01 (Low, Fixed after QA by the lead — `vite.config.js` now uses `changeOrigin: true`) `L1_API_PROXY` with `changeOrigin:false` makes every browser mutation fail against `wrangler dev`
 With the documented local setup (`L1_API_PROXY=http://127.0.0.1:8787`) the browser's `Host` (the Vite port) reaches `wrangler dev`, which then
 sends the Worker an `Origin` that fails the CSRF check (`403 Cross-origin requests are not allowed.`), whatever `PUBLIC_ORIGIN` is set to
 (verified with `curl -H 'Host: 127.0.0.1:5183'`: always 403; with the real Host: passes). Reads work, every POST/PUT/PATCH/DELETE fails, so local
@@ -56,7 +56,7 @@ OpenAI 8792, overridable with `L1_E2E_WORKER_PORT`, `L1_E2E_VITE_PORT`, `L1_E2E_
 `playwright.config.js` has `testDir: ./e2e`; spec files under `e2e/studio` would run without the real stack and fail. They are named
 `*.qa.js` and only `playwright.studio.config.js` matches them.
 
-### Q-05 (Low, Reported — part A) Flaky touch-target test, see `docs/qa/skips.md` ("One flaky test observed").
+### Q-05 (Low, Fixed after QA by the lead) Flaky touch-target test, see `docs/qa/skips.md` ("One flaky test observed"). `e2e/l1.spec.js` now waits for running CSS transitions to finish before measuring.
 
 ## Not defects, but worth knowing
 * Zones offered in Arrange depend on the compartment geometry (e.g. Rear Zone has no "upper shelf"); the specs read the real options.
