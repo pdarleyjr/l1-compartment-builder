@@ -25,7 +25,11 @@ test('primary layout has no horizontal document overflow', async ({ page }) => {
 test('visible controls meet touch target sizing', async ({ page, isMobile }) => {
   if (isMobile) await page.getByRole('button', { name: 'Open navigation menu' }).click();
 
-  const findUndersized = () => page.locator(
+  // Measure only after CSS transitions settle: sampling mid drawer-slide read "Close menu" as 43.99999 px (QA Q-05).
+  const settled = () => page.waitForFunction(() => document.getAnimations()
+    .filter(animation => typeof CSSTransition === 'undefined' || animation instanceof CSSTransition)
+    .every(animation => animation.playState !== 'running'));
+  const measureUndersized = () => page.locator(
     'button:visible, input:visible:not([type="file"]), select:visible, textarea:visible, label:has(input[type="file"]):visible',
   ).evaluateAll(controls =>
     controls.flatMap(control => {
@@ -39,6 +43,10 @@ test('visible controls meet touch target sizing', async ({ page, isMobile }) => 
         : [];
     }),
   );
+  const findUndersized = async () => {
+    await settled();
+    return measureUndersized();
+  };
 
   expect(await findUndersized()).toEqual([]);
 
