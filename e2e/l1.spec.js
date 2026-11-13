@@ -1,44 +1,11 @@
 import { expect, test } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
-
-const TINY_PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=';
-
-async function isolateSharedState(page) {
-  const empty = {};
-  for (const id of ['CabRearZone', 'LS1', 'LS2', 'LS3', 'LS4', 'RS1', 'RS2', 'RS3', 'RS4', 'RS5', 'RR1']) {
-    empty[id] = Array(15).fill('');
-  }
-
-  await page.route('https://l1-state-sync.pdarleyjr.workers.dev/**', async route => {
-    const url = new URL(route.request().url());
-    if (route.request().method() === 'GET' && url.pathname === '/state') {
-      return route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({ allocations: empty, _serverTs: 1 }),
-      });
-    }
-    if (route.request().method() === 'GET' && url.pathname === '/images') {
-      return route.fulfill({ status: 200, contentType: 'application/json', body: 'null' });
-    }
-    if (route.request().method() === 'POST' && url.pathname === '/generate-image') {
-      return route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({ dataUrl: `data:image/png;base64,${TINY_PNG}` }),
-      });
-    }
-    return route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify({ ok: true, _serverTs: Date.now() }),
-    });
-  });
-}
+import { FakeApi } from './helpers/fake-api.js';
 
 test.beforeEach(async ({ page }) => {
-  await isolateSharedState(page);
+  await new FakeApi().install(page);
   await page.goto('/');
+  await expect(page.getByText('Loading L1 Compartment Builder')).toBeHidden();
 });
 
 async function navigateTo(page, isMobile, name) {
@@ -173,18 +140,12 @@ test('inventory items can be edited and removed', async ({ page, isMobile }) => 
   await expect(page.getByText('1 Ton Griphoist', { exact: true })).toHaveCount(0);
 });
 
-test('image upload and AI rendering flows add carousel images', async ({ page, isMobile }) => {
+test('Studio entry points replace the old upload and AI controls', async ({ page, isMobile }) => {
   await navigateTo(page, isMobile, /^LS1/);
-  await page.locator('input[type="file"]').setInputFiles({
-    name: 'upload-test.png',
-    mimeType: 'image/png',
-    buffer: Buffer.from(TINY_PNG, 'base64'),
-  });
-  await expect(page.getByRole('img', { name: 'upload-test' })).toBeVisible();
-
-  await page.getByLabel('Additional AI rendering instructions').fill('Mount tools low and centered.');
-  await page.getByRole('button', { name: 'Generate AI Rendering', exact: true }).click();
-  await expect(page.getByRole('img', { name: 'AI Rendering' })).toBeVisible();
+  await expect(page.locator('input[type="file"]')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'AI Compartment Studio' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Add photos' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Generate rendering' })).toBeVisible();
 });
 
 test('all primary routes render images without browser or network errors', async ({ page, isMobile }) => {
@@ -259,4 +220,164 @@ test('Excel export downloads a workbook', async ({ page }) => {
   await page.getByRole('button', { name: 'Export Excel' }).click();
   const download = await downloadPromise;
   expect(download.suggestedFilename()).toBe('L1_Compartment_Plan.xlsx');
+});
+
+// ─── API integration (sign-in, read-only, server gallery, Studio, error boundary) ─────────────────────────────────
+const HOIST = '1 Ton Griphoist';
+const pill = page => page.locator('[data-testid=sync-status]:visible').last();
+
+// A stand-in Studio chunk: plain element objects, so it needs no imports. It echoes the props contract.
+const FAKE_STUDIO = `
+const el = (type, props, ...children) => ({ $$typeof: Symbol.for('react.element'), type, key: props?.key ?? null, ref: null,
+  props: { ...props, children: children.length === 1 ? children[0] : children }, _owner: null });
+export default function StudioShell(p) {
+  return el('div', { 'data-testid': 'studio-fake', role: 'dialog', 'aria-label': 'Studio' },
+    el('p', { key: 'a' }, 'Studio for ' + p.compId + ' step ' + (p.initialStep ?? 'none') + ' rev ' + p.plannerRevision + ' as ' + p.session.email + ' doc ' + (p.plannerDoc?.schema ?? 'none')),
+    el('button', { key: 'b', onClick: () => p.onMainImageChanged({}) }, 'Notify main image changed'),
+    el('button', { key: 'c', onClick: p.onClose }, 'Close studio'));
+}`;
+
+test.describe('API integration', () => {
+  test('signed out: the plan is readable but every editing control is gone, with one Sign in to edit action', async ({ browser }) => {
+    const api = new FakeApi({ patch: { allocations: { ...new FakeApi().view().allocations, LS1: [HOIST, ...Array(14).fill('')] } } });
+    const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+    const device = await api.install(context, { signedIn: false });
+    const page = await context.newPage();
+    await page.goto('/');
+    await expect(page.getByText('Loading L1 Compartment Builder')).toBeHidden();
+    await page.getByRole('button', { name: /^LS1/ }).click();
+    await expect(page.getByRole('combobox', { name: 'Equipment for slot 1', exact: true })).toHaveText(HOIST);
+    await expect(page.getByRole('combobox', { name: 'Equipment for slot 1', exact: true })).toBeDisabled();
+    for (const name of ['Bulk Add to Compartment', 'Create Bundle', 'Add Row', 'Clear slot 1', 'Reset All', 'AI Compartment Studio', 'Add photos']) {
+      await expect(page.getByRole('button', { name, exact: true })).toHaveCount(0);
+    }
+    await page.getByRole('button', { name: 'Inventory Status', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Edit 1 Ton Griphoist' })).toHaveCount(0);
+    await expect(page.getByLabel('Custom tool name')).toHaveCount(0);
+    await expect(pill(page)).toHaveText('Sign in to save');
+    await expect(page.getByRole('link', { name: /sign out/i })).toHaveCount(0);
+    // reading still works: export is available
+    await expect(page.getByRole('button', { name: 'Export Excel' })).toBeVisible();
+
+    const signInButtons = page.getByRole('button', { name: 'Sign in to edit' });
+    await expect(signInButtons).toHaveCount(1);
+    const login = page.waitForRequest(r => /\/api\/auth\/login\?return=/.test(r.url()));
+    await signInButtons.click();
+    await login;
+    await expect(page.getByText('Loading L1 Compartment Builder')).toBeHidden();
+    await page.getByRole('button', { name: 'Inventory Status', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Edit 1 Ton Griphoist' })).toBeVisible();
+    expect(device.requests.filter(r => r.startsWith('POST /planner/ops'))).toEqual([]);
+    await context.close();
+  });
+
+  test('signed in: email and sign-out link are shown; an unmigrated planner is read-only with a notice', async ({ browser }) => {
+    const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+    await new FakeApi({ migrated: false }).install(context);
+    const page = await context.newPage();
+    await page.goto('/');
+    await expect(page.getByText('Loading L1 Compartment Builder')).toBeHidden();
+    await expect(page.getByText('firefighter@example.test')).toBeVisible();
+    await expect(page.getByRole('link', { name: /sign out/i })).toHaveAttribute('href', '/cdn-cgi/access/logout');
+    await expect(page.getByText(/being moved to the new service/)).toBeVisible();
+    await page.getByRole('button', { name: /^LS1/ }).click();
+    await expect(page.getByRole('combobox', { name: 'Equipment for slot 1', exact: true })).toBeDisabled();
+    await context.close();
+  });
+
+  test('carousel shows the server main image first with a provenance badge and the stale warning', async ({ page, isMobile }) => {
+    const api = new FakeApi();
+    const id = api.addAsset('LS2', { title: 'Approved layout', provenance: 'approved_concept' });
+    api.addAsset('LS2', { title: 'Tool group photo' });
+    api.setMain('LS2', { kind: 'asset', ref: id, provenance: 'approved_concept', stale: true });
+    await api.install(page);
+    await page.goto('/');
+    await navigateTo(page, isMobile, /^LS2/);
+    await expect(page.getByRole('img', { name: 'Approved layout' })).toBeVisible();
+    await expect(page.getByText('Approved concept', { exact: true })).toBeVisible();
+    await expect(page.getByText('main image', { exact: true })).toBeVisible();
+    await expect(page.getByText('Image may be outdated — equipment assignments changed')).toBeVisible();
+    // main + 2 presets + 1 other photo
+    const dots = page.getByRole('button', { name: /^Show image \d+ of 4$/ });
+    await expect(dots).toHaveCount(4);
+    await expect(dots.first()).toHaveAttribute('aria-current', 'true');
+    // keyboard
+    await dots.first().focus();
+    await page.keyboard.press('ArrowRight');
+    await expect(page.getByRole('img', { name: 'Compartment Photo' })).toBeVisible();
+    await expect(dots.nth(1)).toHaveAttribute('aria-current', 'true');
+    await page.keyboard.press('ArrowLeft');
+    await expect(page.getByRole('img', { name: 'Approved layout' })).toBeVisible();
+  });
+
+  test('Studio chunk loads lazily with the props contract, notifies, and closes', async ({ page, isMobile }) => {
+    const api = new FakeApi();
+    await api.install(page);
+    let chunkRequests = 0;
+    await page.route('**/src/studio/StudioShell.jsx*', route => {
+      chunkRequests += 1;
+      return route.fulfill({ status: 200, contentType: 'text/javascript', body: FAKE_STUDIO });
+    });
+    await page.goto('/');
+    await navigateTo(page, isMobile, /^LS1/);
+    expect(chunkRequests).toBe(0);
+    await page.getByRole('button', { name: 'AI Compartment Studio' }).click();
+    await expect(page.getByTestId('studio-fake')).toContainText('Studio for LS1 step none rev 1 as firefighter@example.test doc 2');
+    expect(chunkRequests).toBe(1);
+    const before = api.counts.mainImageGets;
+    await page.getByRole('button', { name: 'Notify main image changed' }).click();
+    await expect.poll(() => api.counts.mainImageGets).toBeGreaterThan(before);
+    await page.getByRole('button', { name: 'Close studio' }).click();
+    await expect(page.getByTestId('studio-fake')).toHaveCount(0);
+    await expect(page.getByRole('heading', { name: 'Compartment LS1', exact: true })).toBeVisible();
+    // the carousel buttons open the Studio at the relevant step
+    await page.getByRole('button', { name: 'Generate rendering' }).click();
+    await expect(page.getByTestId('studio-fake')).toContainText('step generate');
+  });
+
+  test('a Studio chunk that fails to load shows a recovery panel and never blanks the planner', async ({ page, isMobile }) => {
+    await new FakeApi().install(page);
+    await page.route('**/src/studio/StudioShell.jsx*', route => route.abort('failed'));
+    await page.goto('/');
+    await navigateTo(page, isMobile, /^LS1/);
+    await page.getByRole('button', { name: 'AI Compartment Studio' }).click();
+    const panel = page.getByRole('alert').filter({ hasText: 'The Studio could not be loaded' });
+    await expect(panel).toBeVisible();
+    await expect(panel.getByRole('button', { name: 'Reload' })).toBeVisible();
+    await panel.getByRole('button', { name: 'Close' }).click();
+    await expect(page.getByRole('heading', { name: 'Compartment LS1', exact: true })).toBeVisible();
+    await expect(page.getByRole('combobox', { name: 'Equipment for slot 1', exact: true })).toBeEnabled();
+  });
+
+  test('a malformed shared document is sanitized instead of blanking the app (error boundary stays as backstop)', async ({ page }) => {
+    const api = new FakeApi();
+    api.seed({ customTools: {}, bundles: { LS1: [{ id: 'x', slotIndices: 5 }] }, removedItems: 'nope' }, { raw: true });
+    await api.install(page);
+    await page.goto('/');
+    await expect(page.getByText('Loading L1 Compartment Builder')).toBeHidden();
+    await expect(page.getByRole('heading', { name: 'Left Side Overview' })).toBeVisible();
+  });
+
+  test('overview cards show the approved main image thumbnail', async ({ page, isMobile }) => {
+    const api = new FakeApi();
+    api.setMain('LS1', { kind: 'asset', ref: api.addAsset('LS1', { title: 'Approved' }) });
+    await api.install(page);
+    await page.goto('/');
+    await navigateTo(page, isMobile, 'Left Side Overview');
+    await expect(page.getByRole('img', { name: 'LS1 main image' })).toBeVisible();
+    await expect(page.getByRole('img', { name: 'Left Side Overview' })).toBeVisible();
+  });
+
+  test('editing saves through the revisioned ops API and the status pill tells the truth', async ({ page, isMobile }) => {
+    const api = new FakeApi();
+    await api.install(page);
+    await page.goto('/');
+    await expect(pill(page)).toHaveText('Saved');
+    await navigateTo(page, isMobile, /^LS1/);
+    await page.getByRole('combobox', { name: 'Equipment for slot 1', exact: true }).click();
+    await page.getByRole('option', { name: /1 Ton Griphoist/ }).click();
+    await expect.poll(() => api.view().allocations.LS1[0]).toBe(HOIST);
+    await expect(pill(page)).toHaveText('Saved');
+    expect(api.opLog).toHaveLength(1);
+  });
 });

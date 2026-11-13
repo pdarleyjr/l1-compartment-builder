@@ -1,18 +1,11 @@
-// Audit reproduction (sync-data part). Every request to the production Worker URL is intercepted
-// and served by the REAL worker/index.js module backed by an in-memory KV that is shared between
-// browser contexts (= two devices). Nothing reaches the network. test.fail() = documented defect;
-// the body asserts the CORRECT behaviour.
-import fs from 'node:fs';
-import os from 'node:os';
-import path from 'node:path';
+// Sync / data regression tests (docs/audit/sync-data.md, SD-01 … SD-18) against the same-origin API contract.
+// Every request to /api is served by e2e/helpers/fake-api.js (in-memory planner document with revisions, galleries,
+// main images); nothing reaches the network. Two browser contexts = two devices sharing one FakeApi.
+// The old expected-failure reproductions of the KV/PUT design are now passing regression tests (or retired with a
+// one-line note naming their replacement).
 import { expect, test } from '@playwright/test';
-import worker from '../worker/index.js';
+import { FakeApi } from './helpers/fake-api.js';
 
-const WORKER_URL = 'https://l1-state-sync.pdarleyjr.workers.dev';
-const ORIGIN = 'http://127.0.0.1:4173';
-const COMPS = ['CabRearZone', 'LS1', 'LS2', 'LS3', 'LS4', 'RS1', 'RS2', 'RS3', 'RS4', 'RS5', 'RR1'];
-const TINY_PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=';
-const TINY_URL = `data:image/png;base64,${TINY_PNG}`;
 const HOIST = '1 Ton Griphoist'; // standard inventory item, qty 1
 const FOG = '1 1/2 Fog Nozzles'; // standard inventory item, qty 1
 
@@ -20,78 +13,18 @@ test.beforeEach(({ browserName: _b }, testInfo) => {
   test.skip(testInfo.project.name !== 'desktop-chromium', 'multi-device scenarios run once, at desktop size');
 });
 test.describe.configure({ timeout: 60_000 });
-// AUDIT_RAW=1 disables the expected-failure marker so the real assertion failures can be inspected.
-const knownDefect = () => { if (!process.env.AUDIT_RAW) test.fail(); };
 
-// The installed @playwright/test wants a chromium revision that is not in this worker's cache. If the
-// default executable is missing, fall back to whatever chromium_headless_shell revision is cached.
-function cachedHeadlessShell() {
-  const root = path.join(process.env.PLAYWRIGHT_BROWSERS_PATH || path.join(os.homedir(), '.cache', 'ms-playwright'));
-  try {
-    for (const dir of fs.readdirSync(root).filter(d => d.startsWith('chromium_headless_shell-')).sort().reverse()) {
-      const exe = path.join(root, dir, 'chrome-headless-shell-linux64', 'chrome-headless-shell');
-      if (fs.existsSync(exe)) return exe;
-    }
-  } catch { /* no cache */ }
-  return undefined;
-}
-const defaultMissing = !fs.existsSync(path.join(os.homedir(), '.cache', 'ms-playwright', 'chromium_headless_shell-1217'));
-if (defaultMissing && cachedHeadlessShell()) test.use({ launchOptions: { executablePath: cachedHeadlessShell() } });
+const pill = page => page.locator('[data-testid=sync-status]:visible').last();
 
-function makeBackend() {
-  const store = new Map();
-  const be = {
-    store,
-    puts: [],
-    failStatePut: false,
-    imagesPutStatus: null,
-    frozen: { A: false, B: false },
-    snap: {},
-    env: { L1_STATE: { async get(k) { return store.has(k) ? store.get(k) : null; }, async put(k, v) { store.set(k, v); } } },
-    state: () => JSON.parse(store.get('allocations') ?? 'null'),
-    images: () => JSON.parse(store.get('images') ?? 'null'),
-    seedState(patch = {}) {
-      const allocations = Object.fromEntries(COMPS.map(c => [c, Array(15).fill('')]));
-      store.set('allocations', JSON.stringify({ allocations, customQtys: {}, customTools: [], bundles: {}, removedItems: [], customDimensions: {}, ...patch, _serverTs: 1 }));
-    },
-    seedImages(uploadedImages, featuredImages = {}) {
-      store.set('images', JSON.stringify({ uploadedImages, featuredImages, _serverTs: 1 }));
-    },
-  };
-  return be;
-}
-
-async function openDevice(browser, be, name) {
+async function openDevice(browser, api, opts) {
   const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
-  await context.route(`${WORKER_URL}/**`, async route => {
-    const req = route.request();
-    const url = new URL(req.url());
-    if (req.method() === 'OPTIONS') return route.fulfill({ status: 204, headers: { 'Access-Control-Allow-Origin': ORIGIN } });
-    if (req.method() === 'POST' && url.pathname === '/generate-image') {
-      return route.fulfill({ status: 200, contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': ORIGIN }, body: JSON.stringify({ dataUrl: TINY_URL }) });
-    }
-    if (req.method() === 'GET' && be.frozen[name]) {
-      const body = be.snap[`${name}${url.pathname}`] ?? 'null';
-      return route.fulfill({ status: 200, contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': ORIGIN }, body });
-    }
-    if (req.method() === 'PUT' && url.pathname === '/state' && be.failStatePut === name) return route.abort('internetdisconnected');
-    if (req.method() === 'PUT' && url.pathname === '/images' && be.imagesPutStatus) {
-      return route.fulfill({ status: be.imagesPutStatus, contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': ORIGIN }, body: '{"error":"Payload too large"}' });
-    }
-    const res = await worker.fetch(new Request(req.url(), { method: req.method(), headers: { Origin: ORIGIN, 'Content-Type': 'application/json' }, body: req.postData() ?? undefined }), be.env);
-    return route.fulfill({ status: res.status, headers: Object.fromEntries(res.headers), body: await res.text() });
-  });
+  const device = await api.install(context, opts);
   const page = await context.newPage();
-  await page.goto(`${ORIGIN}/`);
-  await expect(page.getByText(/Synced with team|Offline/)).toBeVisible({ timeout: 10_000 });
-  return { context, page };
+  await page.goto('/');
+  await expect(page.getByText('Loading L1 Compartment Builder')).toBeHidden();
+  await expect(pill(page)).toHaveText(/Saved|Sign in to save/);
+  return { context, page, device };
 }
-
-const freeze = (be, name) => {
-  be.snap[`${name}/state`] = be.store.get('allocations') ?? 'null';
-  be.snap[`${name}/images`] = be.store.get('images') ?? 'null';
-  be.frozen[name] = true;
-};
 
 async function assignSlot(page, comp, slot, item) {
   await page.getByRole('button', { name: new RegExp(`^${comp}`) }).click();
@@ -99,157 +32,165 @@ async function assignSlot(page, comp, slot, item) {
   await page.getByRole('searchbox', { name: /search equipment/i }).fill(item);
   await page.getByRole('option', { name: new RegExp(item.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')) }).first().click();
 }
-
-const photo = (uid, title = uid) => ({ uid, title, fileName: `${uid}.png`, dataUrl: TINY_URL });
-const localJson = (page, key) => page.evaluate(k => JSON.parse(localStorage.getItem(k) ?? 'null'), key);
+const slotBox = (page, n) => page.getByRole('combobox', { name: `Equipment for slot ${n}`, exact: true });
 
 test('SD-01 two devices editing different compartments do not lose either edit', async ({ browser }) => {
-  knownDefect(); // observed: B's full-document PUT overwrites A's edit
-  const be = makeBackend(); be.seedState();
-  const a = await openDevice(browser, be, 'A');
-  const b = await openDevice(browser, be, 'B');
-  freeze(be, 'B'); // B has not polled yet (5 s poll window)
+  const api = new FakeApi();
+  const a = await openDevice(browser, api);
+  const b = await openDevice(browser, api);
+  b.device.freezeReads(); // B has not polled yet (5 s poll window)
   await assignSlot(a.page, 'LS1', 1, HOIST);
-  await expect.poll(() => be.state()?.allocations.LS1[0], { timeout: 5000 }).toBe(HOIST);
+  await expect.poll(() => api.view().allocations.LS1[0], { timeout: 5000 }).toBe(HOIST);
   await assignSlot(b.page, 'RS1', 1, FOG);
-  await expect.poll(() => be.state()?.allocations.RS1[0], { timeout: 5000 }).toBe(FOG);
-  const saved = be.state().allocations;
+  await expect.poll(() => api.view().allocations.RS1[0], { timeout: 5000 }).toBe(FOG);
+  const saved = api.view().allocations;
   expect([saved.LS1[0], saved.RS1[0]]).toEqual([HOIST, FOG]);
+  // B's screen also shows A's edit once its save round-trips (its base moved to the server document)
+  await b.page.getByRole('button', { name: /^LS1/ }).click();
+  await expect(slotBox(b.page, 1)).toHaveText(HOIST);
 });
 
-test('SD-09 (evidence) concurrent assignment of the last unit does not over-allocate, it loses one update', async ({ browser }) => {
-  const be = makeBackend(); be.seedState();
-  const a = await openDevice(browser, be, 'A');
-  const b = await openDevice(browser, be, 'B');
-  freeze(be, 'B');
+test('SD-01b a change to the same slot from a stale device is rejected with a notice naming slot and what was kept', async ({ browser }) => {
+  const api = new FakeApi();
+  const a = await openDevice(browser, api);
+  const b = await openDevice(browser, api);
+  b.device.freezeReads();
   await assignSlot(a.page, 'LS1', 1, HOIST);
-  await expect.poll(() => be.state()?.allocations.LS1[0]).toBe(HOIST);
+  await expect.poll(() => api.view().allocations.LS1[0]).toBe(HOIST);
+  await assignSlot(b.page, 'LS1', 1, FOG);
+  const notice = b.page.getByRole('status').filter({ hasText: /LS1 slot 1/ });
+  await expect(notice).toContainText('kept their change');
+  await expect(slotBox(b.page, 1)).toHaveText(HOIST);
+  expect(api.view().allocations.LS1[0]).toBe(HOIST);
+  await notice.getByRole('button', { name: 'Dismiss notice' }).click();
+  await expect(notice).toHaveCount(0);
+});
+
+test('SD-09 concurrent assignment of the last unit never over-allocates; the loser is told', async ({ browser }) => {
+  const api = new FakeApi();
+  const a = await openDevice(browser, api);
+  const b = await openDevice(browser, api);
+  b.device.freezeReads();
+  await assignSlot(a.page, 'LS1', 1, HOIST);
+  await expect.poll(() => api.view().allocations.LS1[0]).toBe(HOIST);
   await assignSlot(b.page, 'RS1', 1, HOIST); // B still sees the unit as free
-  await expect.poll(() => be.state()?.allocations.RS1[0]).toBe(HOIST);
-  const placed = Object.values(be.state().allocations).flat().filter(s => s === HOIST).length;
-  expect(placed).toBe(1); // qty 1: no over-allocation in KV, but only because A's placement was erased (SD-01)
-  expect(be.state().allocations.LS1[0]).toBe('');
+  await expect(b.page.getByRole('status').filter({ hasText: /RS1 slot 1/ })).toBeVisible();
+  const placed = Object.values(api.view().allocations).flat().filter(s => s === HOIST).length;
+  expect(placed).toBe(1);
+  expect(api.view().allocations.LS1[0]).toBe(HOIST); // A's placement is kept
+  await expect(slotBox(b.page, 1)).toHaveText('— Empty Slot —');
 });
 
-test('SD-02 a photo deleted on device A disappears from device B on its next pull', async ({ browser }) => {
-  knownDefect(); // observed: additive merge never removes it
-  const be = makeBackend(); be.seedState(); be.seedImages({ LS1: [photo('x-photo')] });
-  const a = await openDevice(browser, be, 'A');
-  const b = await openDevice(browser, be, 'B');
+test('SD-02/03 a photo deleted on device A is gone on device B and is never resurrected by a reload', async ({ browser }) => {
+  const api = new FakeApi();
+  api.addAsset('LS1', { title: 'x-photo' });
+  const a = await openDevice(browser, api);
+  const b = await openDevice(browser, api);
   await a.page.getByRole('button', { name: /^LS1/ }).click();
+  await b.page.getByRole('button', { name: /^LS1/ }).click();
+  await expect(b.page.getByRole('button', { name: 'Show image 2 of 2' })).toBeVisible();
   await a.page.getByRole('button', { name: 'Show image 2 of 2' }).click();
+  a.page.once('dialog', d => d.accept());
   await a.page.getByRole('button', { name: 'Remove this image' }).click();
-  await expect.poll(() => be.images()?.uploadedImages.LS1.length, { timeout: 5000 }).toBe(0);
-  await b.page.waitForTimeout(7000); // > one 5 s poll
-  const bLocal = await localJson(b.page, 'l1-compartment-builder-uploads');
-  expect(bLocal.LS1 ?? []).toHaveLength(0);
-});
-
-test('SD-03 reloading a device that still holds a deleted photo does not resurrect it in KV', async ({ browser }) => {
-  knownDefect(); // observed: B pushes its stale local copy back on load
-  const be = makeBackend(); be.seedState(); be.seedImages({ LS1: [photo('x-photo')] });
-  const a = await openDevice(browser, be, 'A');
-  const b = await openDevice(browser, be, 'B');
-  await a.page.getByRole('button', { name: /^LS1/ }).click();
-  await a.page.getByRole('button', { name: 'Show image 2 of 2' }).click();
-  await a.page.getByRole('button', { name: 'Remove this image' }).click();
-  await expect.poll(() => be.images()?.uploadedImages.LS1.length, { timeout: 5000 }).toBe(0);
+  await expect(a.page.getByRole('img', { name: 'x-photo' })).toHaveCount(0);
   await b.page.reload();
-  await expect(b.page.getByText(/Synced with team|Offline/)).toBeVisible();
-  await b.page.waitForTimeout(3000);
-  expect(be.images().uploadedImages.LS1 ?? []).toHaveLength(0);
+  await b.page.getByRole('button', { name: /^LS1/ }).click();
+  await expect(b.page.getByRole('img', { name: 'Compartment Photo' })).toBeVisible();
+  await expect(b.page.getByRole('button', { name: /Show image 2/ })).toHaveCount(0);
+  await a.page.reload();
+  await a.page.getByRole('button', { name: /^LS1/ }).click();
+  await expect(a.page.getByRole('button', { name: /Show image 2/ })).toHaveCount(0);
 });
 
-test('SD-04 a featured-image change on device A replaces the featured image on device B', async ({ browser }) => {
-  knownDefect(); // observed: B keeps its local featured selection ("remote wins only if local has none")
-  const be = makeBackend(); be.seedState();
-  be.seedImages({}, { LS2: { kind: 'preset', src: '/images/LS2.webp' } });
-  const a = await openDevice(browser, be, 'A');
-  const b = await openDevice(browser, be, 'B');
+test('SD-04 a main-image change on device A replaces the first image on device B', async ({ browser }) => {
+  const api = new FakeApi();
+  const a = await openDevice(browser, api);
+  const b = await openDevice(browser, api);
   await a.page.getByRole('button', { name: /^LS2/ }).click();
   await a.page.getByRole('button', { name: 'Show image 2 of 2' }).click();
-  await a.page.getByRole('button', { name: 'Set as featured image' }).click();
-  await expect.poll(() => be.images()?.featuredImages.LS2?.src, { timeout: 5000 }).toBe('/images/LS2_rendering.webp');
-  await b.page.waitForTimeout(7000);
-  expect((await localJson(b.page, 'l1-compartment-builder-featured')).LS2.src).toBe('/images/LS2_rendering.webp');
+  await a.page.getByRole('button', { name: 'Set as main image' }).click();
+  await expect.poll(() => api.mains.LS2?.ref).toBe('/images/LS2_rendering.webp');
+  await b.page.reload();
+  await b.page.getByRole('button', { name: /^LS2/ }).click();
+  await expect(b.page.getByRole('img', { name: 'Rendering with Tools' })).toBeVisible();
+  await expect(b.page.getByRole('button', { name: 'Show image 1 of 2' })).toHaveAttribute('aria-current', 'true');
+  await expect(b.page.getByText('main image', { exact: true })).toBeVisible();
 });
 
-test('SD-04 removing the featured image on device A clears it on device B', async ({ browser }) => {
-  knownDefect(); // observed: B keeps showing the removed featured selection
-  const be = makeBackend(); be.seedState();
-  be.seedImages({}, { LS2: { kind: 'preset', src: '/images/LS2.webp' } });
-  const a = await openDevice(browser, be, 'A');
-  const b = await openDevice(browser, be, 'B');
-  await a.page.getByRole('button', { name: /^LS2/ }).click();
-  await a.page.getByRole('button', { name: 'Remove as featured image' }).click();
-  await expect.poll(() => be.images()?.featuredImages.LS2, { timeout: 5000 }).toBeUndefined();
-  await b.page.waitForTimeout(7000);
-  expect((await localJson(b.page, 'l1-compartment-builder-featured')).LS2).toBeUndefined();
-});
+// SD-04b (clearing a featured image) is retired: the action no longer exists; replaced by SD-04 above (main images are replaced or restored in the Studio).
 
-test('SD-06 an edit made while the state PUT fails is retried once connectivity returns', async ({ browser }) => {
-  knownDefect(); // observed: nothing retries until another edit happens (or a pull overwrites it)
-  const be = makeBackend(); be.seedState();
-  const a = await openDevice(browser, be, 'A');
-  be.failStatePut = 'A';
+test('SD-06 an edit made while the ops POST fails is retried once connectivity returns', async ({ browser }) => {
+  const api = new FakeApi();
+  const a = await openDevice(browser, api);
+  a.device.failOps = 'network';
   await assignSlot(a.page, 'LS1', 1, HOIST);
-  await a.page.waitForTimeout(1500);
-  expect(be.state().allocations.LS1[0]).toBe('');
-  be.failStatePut = false; // network back
-  await expect.poll(() => be.state().allocations.LS1[0], { timeout: 12_000 }).toBe(HOIST);
+  await expect(pill(a.page)).toHaveText('Offline — changes queued');
+  expect(api.view().allocations.LS1[0]).toBe('');
+  a.device.failOps = null; // network back
+  await expect.poll(() => api.view().allocations.LS1[0], { timeout: 15_000 }).toBe(HOIST);
+  await expect(pill(a.page)).toHaveText('Saved');
 });
 
-test('SD-06b an offline edit survives a reload once the network is back', async ({ browser }) => {
-  knownDefect(); // observed: initial pull replaces local state wholesale with the server copy
-  const be = makeBackend(); be.seedState();
-  const a = await openDevice(browser, be, 'A');
-  be.failStatePut = 'A';
+test('SD-06b an offline edit survives a reload (and a second reload) and is delivered when the network is back', async ({ browser }) => {
+  const api = new FakeApi();
+  const a = await openDevice(browser, api);
+  a.device.failOps = 'network';
   await assignSlot(a.page, 'LS1', 1, HOIST);
-  await a.page.waitForTimeout(1500);
-  be.failStatePut = false;
+  await expect(pill(a.page)).toHaveText('Offline — changes queued');
   await a.page.reload();
-  await expect(a.page.getByText(/Synced with team|Offline/)).toBeVisible();
+  await expect(a.page.getByText('Loading L1 Compartment Builder')).toBeHidden();
   await a.page.getByRole('button', { name: /^LS1/ }).click();
-  await expect(a.page.getByRole('combobox', { name: 'Equipment for slot 1', exact: true })).toHaveText(HOIST);
+  await expect(slotBox(a.page, 1)).toHaveText(HOIST);
+  await a.page.reload();
+  await a.page.getByRole('button', { name: /^LS1/ }).click();
+  await expect(slotBox(a.page, 1)).toHaveText(HOIST);
+  expect(api.view().allocations.LS1[0]).toBe('');
+  a.device.failOps = null;
+  await expect.poll(() => api.view().allocations.LS1[0], { timeout: 15_000 }).toBe(HOIST);
 });
 
-test('SD-16 a rejected image PUT keeps showing as a sync problem instead of reverting to "Synced"', async ({ browser }) => {
-  knownDefect(); // observed: next successful GET poll resets the indicator to "Synced with team"
-  const be = makeBackend(); be.seedState(); be.imagesPutStatus = 413;
-  const a = await openDevice(browser, be, 'A');
-  await a.page.waitForTimeout(7500);
-  await expect(a.page.getByText(/Offline/)).toBeVisible();
-});
-
-test('SD-17 an AI-generated image records its source and the inventory it was generated from', async ({ browser }) => {
-  knownDefect(); // observed: entry is only {dataUrl,title,fileName,uid}
-  const be = makeBackend(); be.seedState();
-  const a = await openDevice(browser, be, 'A');
+test('SD-16 a failing save keeps showing a sync problem instead of reverting to "Saved"', async ({ browser }) => {
+  const api = new FakeApi();
+  const a = await openDevice(browser, api);
+  a.device.failOps = 500;
   await assignSlot(a.page, 'LS1', 1, HOIST);
-  await a.page.getByRole('button', { name: 'Generate AI Rendering', exact: true }).click();
-  await expect.poll(() => be.images()?.uploadedImages?.LS1?.length, { timeout: 8000 }).toBe(1);
-  const entry = be.images().uploadedImages.LS1[0];
-  expect(entry.source ?? entry.generatedFrom ?? entry.inventorySnapshot).toBeTruthy();
+  await expect(pill(a.page)).toHaveText('Sync problem (retrying)');
+  await a.page.waitForTimeout(6500); // longer than one 5 s poll, which succeeds
+  await expect(pill(a.page)).toHaveText('Sync problem (retrying)');
+  await expect(slotBox(a.page, 1)).toHaveText(HOIST); // the local edit is still shown and still queued
+});
+
+// SD-17 (no binding between images and inventory) is retired: replaced by the server-side inventory fingerprint + stale badge, covered by the carousel test in e2e/l1.spec.js.
+
+test('SD-18 a pull never overwrites an edit that is still being sent', async ({ browser }) => {
+  const api = new FakeApi();
+  const a = await openDevice(browser, api);
+  a.device.failOps = 'network'; // A's edit stays unsent
+  await assignSlot(a.page, 'LS1', 1, HOIST);
+  api.applyDirect([{ op: 'setSlot', comp: 'RS1', index: 0, value: FOG, expect: '' }]); // a teammate edits elsewhere
+  await a.page.waitForTimeout(6500); // A pulls the teammate's revision
+  await a.page.getByRole('button', { name: /^RS1/ }).click();
+  await expect(slotBox(a.page, 1)).toHaveText(FOG);
+  await a.page.getByRole('button', { name: /^LS1/ }).click();
+  await expect(slotBox(a.page, 1)).toHaveText(HOIST);
+  a.device.failOps = null;
+  await expect.poll(() => api.view().allocations.LS1[0], { timeout: 15_000 }).toBe(HOIST);
+  expect(api.view().allocations.RS1[0]).toBe(FOG);
 });
 
 test('SD-07 removing a standard item and re-adding the same name as custom keeps the new quantity', async ({ browser }) => {
-  knownDefect(); // observed: getQty() prefers the built-in quantity
-  const be = makeBackend(); be.seedState();
-  const { page } = await openDevice(browser, be, 'A');
+  const { page } = await openDevice(browser, new FakeApi());
   await page.getByRole('button', { name: 'Inventory Status', exact: true }).click();
   page.once('dialog', d => d.accept());
   await page.getByRole('button', { name: `Remove ${HOIST}`, exact: true }).click();
   await page.getByLabel('Custom tool name').fill(HOIST);
   await page.getByLabel('Custom tool quantity').fill('5');
   await page.getByRole('button', { name: 'Add Tool' }).click();
-  const qtyCell = page.locator('tr', { hasText: HOIST }).locator('td').nth(1);
-  await expect(qtyCell).toHaveText('5');
+  await expect(page.locator('tr', { hasText: HOIST }).locator('td').nth(1)).toHaveText('5');
 });
 
 test('SD-07 renaming a standard item away and back, then removing it, really removes it', async ({ browser }) => {
-  knownDefect(); // observed: the leftover custom copy keeps the row alive
-  const be = makeBackend(); be.seedState();
-  const { page } = await openDevice(browser, be, 'A');
+  const { page } = await openDevice(browser, new FakeApi());
   await page.getByRole('button', { name: 'Inventory Status', exact: true }).click();
   const rename = async (from, to) => {
     await page.getByRole('button', { name: `Edit ${from}`, exact: true }).click();
@@ -263,45 +204,75 @@ test('SD-07 renaming a standard item away and back, then removing it, really rem
   await expect(page.getByRole('button', { name: `Remove ${HOIST}`, exact: true })).toHaveCount(0);
 });
 
+test('rename in Inventory Status keeps the equipment id, assignment ids and bundles consistent', async ({ browser }) => {
+  const api = new FakeApi();
+  const a = await openDevice(browser, api);
+  await assignSlot(a.page, 'LS1', 1, HOIST);
+  await a.page.getByRole('combobox', { name: 'Equipment for slot 2', exact: true }).click();
+  await a.page.getByRole('searchbox', { name: /search equipment/i }).fill('Fog');
+  await a.page.getByRole('option', { name: /1 1\/2 Fog Nozzles/ }).first().click();
+  await a.page.getByRole('button', { name: 'Create Bundle' }).click();
+  await a.page.getByRole('button', { name: /Add slot 1 to bundle/ }).click();
+  await a.page.getByRole('button', { name: /Add slot 2 to bundle/ }).click();
+  await a.page.getByRole('button', { name: 'Bundle 2 Selected Slots' }).click();
+  await a.page.getByPlaceholder(/Bundle name/).fill('Kit');
+  await a.page.getByRole('button', { name: 'Save Bundle' }).click();
+  await expect.poll(() => api.view().bundles.LS1?.length).toBe(1);
+  const before = { eq: api.doc.equipmentIds[HOIST], as: api.doc.assignmentIds.LS1[0] };
+  expect(before.eq).toBeTruthy();
+
+  await a.page.getByRole('button', { name: 'Inventory Status', exact: true }).click();
+  await a.page.getByRole('button', { name: `Edit ${HOIST}`, exact: true }).click();
+  await a.page.getByLabel(`Equipment name for ${HOIST}`).fill('Synthetic Hoist');
+  await a.page.getByRole('button', { name: `Save changes for ${HOIST}`, exact: true }).click();
+  await expect.poll(() => api.view().allocations.LS1[0]).toBe('Synthetic Hoist');
+  expect(JSON.stringify(api.opLog.at(-1).ops)).toContain('renameEquipment'); // the rename hint reached the server
+  expect(api.doc.equipmentIds['Synthetic Hoist']).toBe(before.eq);
+  expect(api.doc.assignmentIds.LS1[0]).toBe(before.as);
+  expect(api.view().bundles.LS1[0].slotIndices).toEqual([0, 1]);
+  await a.page.getByRole('button', { name: /^LS1/ }).click();
+  await expect(slotBox(a.page, 1)).toHaveText('Synthetic Hoist');
+});
+
 test('SD-08 Reset All does not leave bundles pointing at emptied slots', async ({ browser }) => {
-  knownDefect(); // observed: bundles are untouched by handleReset()
-  const be = makeBackend();
-  const allocations = Object.fromEntries(COMPS.map(c => [c, Array(15).fill('')]));
-  allocations.LS1[0] = HOIST; allocations.LS1[1] = FOG;
-  be.seedState({ allocations, bundles: { LS1: [{ id: 'b1', name: 'Synthetic Kit', colorIdx: 0, slotIndices: [0, 1] }] } });
-  const { page } = await openDevice(browser, be, 'A');
+  const base = new FakeApi().view();
+  const api = new FakeApi({ patch: { allocations: { ...base.allocations, LS1: [HOIST, FOG, ...Array(13).fill('')] }, bundles: { LS1: [{ id: 'b1', name: 'Synthetic Kit', colorIdx: 0, slotIndices: [0, 1] }] } } });
+  const { page } = await openDevice(browser, api);
   page.once('dialog', d => d.accept());
   await page.getByRole('button', { name: 'Reset All' }).click();
-  await expect.poll(() => be.state().allocations.LS1[0], { timeout: 5000 }).toBe('');
-  const remaining = (be.state().bundles.LS1 ?? []).flatMap(b => b.slotIndices);
-  expect(remaining).toEqual([]);
+  await expect.poll(() => api.view().allocations.LS1[0], { timeout: 5000 }).toBe('');
+  expect((api.view().bundles.LS1 ?? []).flatMap(b => b.slotIndices)).toEqual([]);
 });
 
 test('SD-08 removing an inventory item prunes it from bundles', async ({ browser }) => {
-  knownDefect(); // observed: allocations are blanked but bundle slotIndices stay
-  const be = makeBackend();
-  const allocations = Object.fromEntries(COMPS.map(c => [c, Array(15).fill('')]));
-  allocations.LS1[0] = HOIST; allocations.LS1[1] = FOG;
-  be.seedState({ allocations, bundles: { LS1: [{ id: 'b1', name: 'Synthetic Kit', colorIdx: 0, slotIndices: [0, 1] }] } });
-  const { page } = await openDevice(browser, be, 'A');
+  const base = new FakeApi().view();
+  const api = new FakeApi({ patch: { allocations: { ...base.allocations, LS1: [HOIST, FOG, ...Array(13).fill('')] }, bundles: { LS1: [{ id: 'b1', name: 'Synthetic Kit', colorIdx: 0, slotIndices: [0, 1] }] } } });
+  const { page } = await openDevice(browser, api);
   await page.getByRole('button', { name: 'Inventory Status', exact: true }).click();
   page.once('dialog', d => d.accept());
   await page.getByRole('button', { name: `Remove ${HOIST}`, exact: true }).click();
-  await expect.poll(() => be.state().allocations.LS1[0], { timeout: 5000 }).toBe('');
-  expect((be.state().bundles.LS1 ?? []).flatMap(b => b.slotIndices)).toEqual([1]);
+  await expect.poll(() => api.view().allocations.LS1[0], { timeout: 5000 }).toBe('');
+  expect((api.view().bundles.LS1 ?? []).flatMap(b => b.slotIndices)).toEqual([1]);
 });
 
-test('SD-05 (evidence) localStorage cannot hold an images document the Worker accepts (>~5M chars)', async ({ browser }) => {
-  const be = makeBackend(); be.seedState();
-  const { page } = await openDevice(browser, be, 'A'); // routed: never touches the real Worker
-  const result = await page.evaluate(() => {
-    const k = 'audit-quota-probe';
-    let stored = 0;
-    try { for (let n = 1_000_000; n <= 12_000_000; n += 1_000_000) { localStorage.setItem(k, 'A'.repeat(n)); stored = n; } }
-    catch { /* quota */ }
-    localStorage.removeItem(k);
-    return stored;
-  });
-  console.log(`SD-05 largest single localStorage value accepted: ${result} chars (Worker accepts up to 12,000,000 B)`);
-  expect(result).toBeLessThan(12_000_000);
+test('SD-05 (replaced) photos are never stored in localStorage; only the planner cache and queue are', async ({ browser }) => {
+  const api = new FakeApi();
+  api.addAsset('LS1', { title: 'big-photo' });
+  const { page } = await openDevice(browser, api);
+  await page.getByRole('button', { name: /^LS1/ }).click();
+  await expect(page.getByRole('img', { name: 'big-photo' }).or(page.getByRole('button', { name: 'Show image 2 of 2' }))).toBeVisible();
+  const keys = await page.evaluate(() => Object.keys(localStorage));
+  expect(keys.filter(k => /upload|featured|image/i.test(k))).toEqual([]);
+  expect(keys).toContain('l1-planner-sync-v5');
+  const sizes = await page.evaluate(() => Object.values(localStorage).reduce((n, v) => n + v.length, 0));
+  expect(sizes).toBeLessThan(200_000);
+});
+
+test('pulls use ?since= and an unchanged document answers 304 (no full re-download every 5 s)', async ({ browser }) => {
+  const api = new FakeApi();
+  await openDevice(browser, api);
+  const before = api.counts.plannerFull;
+  await new Promise(r => setTimeout(r, 11_500));
+  expect(api.counts.plannerFull).toBe(before);
+  expect(api.counts.plannerNotModified).toBeGreaterThanOrEqual(1);
 });
