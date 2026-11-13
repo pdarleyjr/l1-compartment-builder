@@ -50,7 +50,7 @@ routes = [
 ENVIRONMENT = "staging"
 AUTH_MODE = "access"
 ACCESS_TEAM_DOMAIN = "https://darl.cloudflareaccess.com"
-ACCESS_AUD = "SET_AT_DEPLOY"
+ACCESS_AUD = "21c30486c3051f15d157ae60bcec4265437a8201c6d7c5564e64d9dbd7d52730"   # Access app "L1 Compartment Builder API (staging)"
 PUBLIC_ORIGIN = "https://l1-staging.mbfdhub.com"
 OWNER_EMAILS = "pdarleyjr@gmail.com"
 
