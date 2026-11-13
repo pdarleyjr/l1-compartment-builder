@@ -447,3 +447,29 @@ nanoid/source-map-js/postcss/postcss-selector-parser/brace-expansion → verify 
 (4) split the CI audit gate (`--omit=dev --audit-level=high` blocking, full audit reported) and add Dependabot. Expected result: runtime
 dependency surface unchanged (none flagged), full audit clean or with one documented dev-only exception. All verification must run on a
 worker via `aiw_run` (the trial upgrade here could not be resolved with npm 9.2).
+
+## Resolution (AI Compartment Studio, part E1)
+
+The pre-Studio Worker (whole-document KV `PUT /state`, `PUT /images`, unauthenticated `POST /generate-image`) was replaced.
+`worker/audit.test.js` and `tests/audit/sync-data.test.js` now assert the new contract; the `fails` markers for fixed
+findings were removed.
+
+| Finding | Status | How |
+|---|---|---|
+| WS-01 forged-Origin mutation | Fixed | every `/api` mutation needs a verified Cloudflare Access JWT (RS256/JWKS, `iss`, `aud`, `exp`/`nbf`) and a same-origin `Origin`; legacy `PUT`/`POST` answer `409 APP_UPDATED` and never write KV |
+| WS-02 anonymous reads | Accepted by design | planner, gallery and published images stay publicly readable (docs §3); the two reproduction tests keep `test.fails` |
+| WS-03/04/05/06 AI rate limit, spend cap, KV write limits | Superseded | `/generate-image` no longer calls any model or KV; spend is enforced server-side by the job ledger (part E2). Regression tests assert no AI call and no KV write |
+| WS-07 body bounds | Fixed | `readJson`/`readBytes` abort at the limit; legacy writes do not read the body |
+| WS-08 12 MB images PUT cost | Obsolete | the endpoint no longer parses bodies; legacy images migrate to R2 in bounded chunks (`/api/admin/migrate-legacy`) |
+| WS-09/10/21/22 generator schema, references, leakage, idempotency | Superseded | constant `409` legacy answer; server-built scene specs and `Idempotency-Key` jobs live in the Studio job API (part E2) |
+| WS-11 document validation | Superseded | no whole-document writes; planner ops are validated per op and applied with preconditions (`shared/planner.js`) |
+| WS-12 Pages preview origins | Fixed | previews can read the 409 explanation but cannot write anything |
+| WS-13 routing | Fixed | 405 + `Allow`, JSON 404, preflight only for real legacy paths with `Max-Age`; no CORS on `/api` |
+| WS-14 CSP | Fixed | `default-src 'none'; frame-ancestors 'none'` on every Worker response |
+| SD-01/14 lost updates, equal revisions | Fixed | `POST /api/planner/ops` with CAS on an integer revision (history primary key aborts a lost race) |
+| SD-09/13 quantity and bundle integrity | Moved | enforced by the op engine (`shared/planner.js`), tested in `tests/shared` (part C) |
+| SD-10/11/12/15 images/state validation | Superseded | legacy write API closed; migration skips unresolvable featured entries and reports them |
+| SD-05 whole base64 document per change | Fixed | images are R2 objects served by URL (`/api/public/assets/:id/display`) |
+
+Implementation decision: `OWNER_EMAILS` are implicit admins (otherwise nobody could run the first
+`/api/admin/migrate-legacy`, which is what seeds `access.admins`).

@@ -1,4 +1,6 @@
 // Append-only audit log (owner after P0: part E1; `auditStatement`/`audit` signatures are a contract for E2).
+import { json } from './http.js';
+
 const MAX_STRING = 500;
 
 function redact(value, depth = 0) {
@@ -24,4 +26,24 @@ export function auditStatement(db, entry, now = Date.now()) {
 
 export async function audit(db, entry, now = Date.now()) {
   await auditStatement(db, entry, now).run();
+}
+
+/** GET /api/admin/audit?limit=&before=<id>&action=  (admin). Newest first. */
+export async function listAudit(ctx) {
+  const { db, url } = ctx;
+  const limit = Math.min(Math.max(parseInt(url.searchParams.get('limit') ?? '100', 10) || 100, 1), 500);
+  const before = parseInt(url.searchParams.get('before') ?? '', 10);
+  const action = url.searchParams.get('action');
+  const where = [];
+  const binds = [];
+  if (Number.isFinite(before)) { where.push('id < ?'); binds.push(before); }
+  if (action) { where.push('action = ?'); binds.push(action.slice(0, 100)); }
+  const { results } = await db
+    .prepare(`SELECT id, at, actor, action, entity_type, entity_id, detail FROM audit_log ${where.length ? `WHERE ${where.join(' AND ')}` : ''} ORDER BY id DESC LIMIT ?`)
+    .bind(...binds, limit).all();
+  const entries = (results ?? []).map(r => ({
+    id: r.id, at: r.at, actor: r.actor, action: r.action, entityType: r.entity_type, entityId: r.entity_id,
+    detail: r.detail ? JSON.parse(r.detail) : null,
+  }));
+  return json({ entries });
 }
