@@ -91,7 +91,7 @@ export function createJobRunner(deps) {
       else if (err instanceof ApiError) body = { code: afterCall ? 'SAVE_FAILED' : 'PREP_FAILED', message: clean(err.message), retryable: !afterCall && err.status >= 500, providerCalled: afterCall };
       else body = { code: afterCall ? 'SAVE_FAILED' : 'PREP_FAILED', message: clean(err?.message || 'Unexpected error'), retryable: false, providerCalled: afterCall };
       if (err instanceof ApiError && err.status === 409) { log.warn('server rejected update (409)', { code: err.code }); return { outcome: 'conflict' }; }
-      log.error('job failed', { code: body.code, retryable: body.retryable, providerCalled: body.providerCalled, err });
+      log.error('job failed', { code: body.code, retryable: body.retryable, providerCalled: body.providerCalled, detail: err?.detail ?? undefined, err });
       await postFail(body);
       return { outcome: 'failed' };
     }

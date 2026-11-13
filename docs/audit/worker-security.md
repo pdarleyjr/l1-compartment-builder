@@ -473,3 +473,26 @@ findings were removed.
 
 Implementation decision: `OWNER_EMAILS` are implicit admins (otherwise nobody could run the first
 `/api/admin/migrate-legacy`, which is what seeds `access.admins`).
+
+## Resolution (security review 2026-11, part S)
+
+Full report: `docs/security/review-2026-11.md`. Status of the original findings after the Studio rewrite, with evidence from
+`worker/test/security/**` and `processor/test/security.test.js`:
+
+| Finding | Status | Evidence |
+|---|---|---|
+| WS-01 Origin-only authentication | Fixed (E1) and re-verified | `auth.test.js`: Access JWT forgery classes, every `ROUTES` entry, CSRF; Fetch-Metadata check added (S-09) |
+| WS-02 anonymous reads | Partly open by design | `/api/public/*` is public on purpose (public + committed display/thumb only; originals no longer served, S-03). The legacy `*.workers.dev` `GET /state` and `/images` stay anonymous read-only; the two `test.fails` in `worker/audit.test.js` document it |
+| WS-03/04/05/06 rate limit and spend cap | Fixed (E1) and re-verified | atomic D1 ledger; `spend-and-prompt.test.js` (tampering, idempotency, parallel, retry, recognize, ledger bounds) |
+| WS-07 body size without Content-Length | Fixed | `objects.test.js` streaming and lying-Content-Length cases |
+| WS-09 client-authored spec/prompt | Fixed (E1) and hardened | server builds the prompt; operator text is quoted/flattened (S-05) |
+| WS-12 preview origins mutate production | Fixed | `*.workers.dev` has no write path (`objects.test.js`); API mutations require a verified identity and our Origin |
+| WS-13 405/Allow, JSON 404 | Fixed | `auth.test.js` "unknown routes and wrong methods" |
+| WS-14 response headers | Fixed | CSP, nosniff, no-referrer, HSTS on every Worker response (S-11) |
+| WS-15 `camera=()` | Fixed | `_headers` has `camera=(self)`; `headers-config.test.js` |
+| WS-18 secrets/history | Re-verified clean | `git log -p --all` scan (31 commits) + working-tree test; identifiers only in `wrangler.toml` |
+| WS-19 compatibility date | Fixed | `wrangler.toml` now `2026-11-01` |
+| WS-21 error leakage | Hardened | processor and provider text never reaches users (S-07); 500 bodies are generic (`objects.test.js`) |
+| WS-22 durable jobs | Fixed (E1/E2) | leases, idempotency, OUTCOME_UNKNOWN never requeued (`spend-and-prompt.test.js`, `processor-api.test.js`) |
+| WS-08/10/11/16 | Superseded | legacy KV document API replaced by D1/R2 with ETag/304 |
+| WS-17 npm audit, WS-20 CI provenance | Not addressed here | outside this part; no network access |

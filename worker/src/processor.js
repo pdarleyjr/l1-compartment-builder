@@ -3,7 +3,7 @@ import { ASSET_LIMITS, ASSET_VARIANTS, JOB_KINDS, JOB_TIMING, PROCESSOR_REPORTAB
 import { selectReferences } from '../../shared/scene-spec.js';
 import { actualCost } from '../../shared/cost.js';
 import { HttpError, SECURITY_HEADERS, json, readBytes, readJson } from './http.js';
-import { sniffImage, KNOWN_EXTENSIONS, TYPE_BY_EXT } from './media.js';
+import { sniffImage, KNOWN_EXTENSIONS, SERVABLE_TYPES, TYPE_BY_EXT, withinPixelLimits } from './media.js';
 import { getSettings } from './settings.js';
 import { loadPlannerDoc } from './planner.js';
 import { newId } from '../../shared/ids.js';
@@ -39,7 +39,12 @@ async function leasedJob(db, jobId, node) {
   return job;
 }
 
-const nodeHint = (request, url) => request.headers.get('X-L1-Node') || url?.searchParams?.get('node') || null;
+/** Raw endpoints carry the node in X-L1-Node (or ?node=); it is mandatory, otherwise the lease check would be skipped. */
+function nodeHint(request, url) {
+  const node = request.headers.get('X-L1-Node') || url?.searchParams?.get('node') || null;
+  if (!node || node.length > 64) throw new HttpError('INVALID_REQUEST', 'X-L1-Node is required.');
+  return node;
+}
 
 async function buildClaim(db, job) {
   const spec = parseJson(job.spec, {});
@@ -116,7 +121,8 @@ export async function getAsset({ request, env, db, params, url }) {
   const key = asset?.[`${variant}_key`];
   const obj = key ? await env.ASSETS.get(key) : null;
   if (!obj) throw new HttpError('NOT_FOUND', 'Image not available.');
-  return new Response(obj.body, { status: 200, headers: { ...SECURITY_HEADERS, 'Content-Type': obj.httpMetadata?.contentType || TYPE_BY_EXT[key.split('.').pop()] || 'application/octet-stream' } });
+  const stored = obj.httpMetadata?.contentType || TYPE_BY_EXT[key.split('.').pop()];
+  return new Response(obj.body, { status: 200, headers: { ...SECURITY_HEADERS, 'Content-Type': SERVABLE_TYPES.has(stored) ? stored : 'application/octet-stream' } });
 }
 
 /** PUT /api/processor/jobs/:jobId/output/:variant — raw bytes for the job's result asset (status must be saving). */
@@ -128,6 +134,7 @@ export async function putOutput({ request, env, db, params, url }) {
   const bytes = await readBytes(request, MAX_BY_VARIANT[variant]);
   const sniff = sniffImage(bytes);
   if (!sniff || !UPLOAD_MIME[variant].includes(sniff.type)) throw new HttpError('UNSUPPORTED_MEDIA', 'Output must be a JPEG, PNG or WebP image.');
+  if (!withinPixelLimits(sniff, 'output')) throw new HttpError('PAYLOAD_TOO_LARGE', 'Output image dimensions are too large.');
   const assetId = outputAssetId(job.id);
   for (const ext of KNOWN_EXTENSIONS) if (ext !== sniff.ext) await env.ASSETS.delete(variantKey(job.compartment_id, assetId, variant, ext));
   await env.ASSETS.put(variantKey(job.compartment_id, assetId, variant, sniff.ext), bytes, { httpMetadata: { contentType: sniff.type } });
@@ -151,13 +158,28 @@ async function cleanupOutput(bucket, job) {
   } catch { /* best effort; the pending-asset sweep does not cover these, they are small and private */ }
 }
 
-function costOf(job, usage, pricing, hint) {
-  try {
-    const v = usage ? actualCost(usage, job.model, pricing) : NaN;
-    if (Number.isFinite(v) && v >= 0) return v;
-  } catch { /* fall through to estimate */ }
-  return Number.isFinite(hint) && hint >= 0 && !usage ? hint : job.estimated_cost_usd;
+/** A reported cost can never exceed this multiple of the reservation: a stolen service token cannot drain the budget with it. */
+const COST_CEILING_FACTOR = 5;
+const COST_CEILING_MIN_USD = 0.25;
+
+/** Final ledger amount: provider usage → price table, else a hint, else the estimate; always finite, >= 0 and capped. */
+export function costOf(job, usage, pricing, hint) {
+  const estimate = Number.isFinite(job.estimated_cost_usd) && job.estimated_cost_usd >= 0 ? job.estimated_cost_usd : 0;
+  const ceiling = Math.max(estimate * COST_CEILING_FACTOR, COST_CEILING_MIN_USD);
+  let v = NaN;
+  try { v = usage ? actualCost(usage, job.model, pricing) : NaN; } catch { /* fall through */ }
+  if (!(Number.isFinite(v) && v >= 0)) v = Number.isFinite(hint) && hint >= 0 && !usage ? hint : estimate;
+  return Math.min(v, ceiling);
 }
+
+/** Small, JSON-safe usage object only (it is stored verbatim). */
+const safeUsage = usage => {
+  if (!usage || typeof usage !== 'object' || Array.isArray(usage)) return null;
+  const text = JSON.stringify(usage);
+  return text.length <= 4000 ? usage : null;
+};
+const safeText = (v, max) => (typeof v === 'string' ? v.slice(0, max) : null);
+const safeDim = (v, fallback) => (Number.isInteger(v) && v >= 1 && v <= 16384 ? v : fallback);
 
 const guardSql = "SELECT 1 FROM generation_jobs WHERE id = ? AND lease_owner = ? AND status IN ('generating','saving')";
 
@@ -171,8 +193,8 @@ async function completeRender(ctx, job, body, node, cost) {
     if (!found[v]) throw new HttpError('CONFLICT', `Output is incomplete (missing ${v}).`);
   }
   const [w, h] = (job.size || '').split('x').map(Number);
-  const width = Number.isInteger(body.width) ? body.width : (w || null);
-  const height = Number.isInteger(body.height) ? body.height : (h || null);
+  const width = safeDim(body.width, w || null);
+  const height = safeDim(body.height, h || null);
   const versionId = outputVersionId(job.id);
   const spec = parseJson(job.spec, {});
   const settings = { preset: job.preset, quality: job.quality, complexity: job.complexity, size: job.size, outputFormat: job.output_format };
@@ -243,6 +265,8 @@ export async function complete(ctx) {
   if (!['generating', 'saving'].includes(job.status)) throw new HttpError('CONFLICT', 'Report generating/saving before completing.');
   if (job.kind === 'render' && job.status !== 'saving') throw new HttpError('CONFLICT', 'Report status "saving" and upload the output first.');
   const { pricing } = await getSettings(db, ['pricing']);
+  body.usage = safeUsage(body.usage);
+  body.providerRequestId = safeText(body.providerRequestId, 128);
   const cost = costOf(job, body.usage, pricing, Number(body.actualCostUsd));
   if (job.kind === 'render') await completeRender(ctx, job, body, node, cost);
   else await completeRecognize(ctx, job, body, node, cost);
@@ -261,10 +285,34 @@ const PROVIDER_MESSAGES = {
   invalid_request: 'OpenAI rejected the request as invalid. Simplify the instructions or reduce the number of reference photos.',
 };
 
-/** @param {string} code @param {string} [message] */
-export function humanFailure(code, message) {
-  if (PROVIDER_MESSAGES[code]) return PROVIDER_MESSAGES[code];
-  return String(message || 'Image generation failed. Please try again.').slice(0, 300);
+const PROCESSOR_MESSAGES = {
+  PROVIDER_BILLING: PROVIDER_MESSAGES.insufficient_quota,
+  PROVIDER_RATE_LIMITED: PROVIDER_MESSAGES.rate_limit,
+  MODERATION_BLOCKED: PROVIDER_MESSAGES.moderation_blocked,
+  PROVIDER_REJECTED: PROVIDER_MESSAGES.invalid_request,
+  PROVIDER_UNAVAILABLE: 'The image provider is having problems right now. Please try again in a few minutes.',
+  PROVIDER_AUTH: 'The image service is not authorized with the provider. An administrator needs to check its configuration.',
+  PROVIDER_MODEL_INVALID: 'The configured image model is not available. An administrator needs to check the Studio presets.',
+  PROVIDER_TIMEOUT: 'The image provider did not answer in time; the outcome is unknown and you may have been charged.',
+  PROVIDER_CONNECTION_LOST: 'The connection to the image provider was lost after sending; the outcome is unknown and you may have been charged.',
+  PROVIDER_UNREACHABLE: 'The image service could not reach the image provider. Please try again.',
+  PROVIDER_BAD_RESPONSE: 'The image provider returned an unusable response. Please try again.',
+  PROVIDER_INCOMPLETE: 'The image provider returned an incomplete response. Please try again.',
+  PREP_FAILED: 'The image service could not prepare the photos for this request.',
+  SAVE_FAILED: 'The image was generated but could not be saved. You may have been charged.',
+  PROCESSOR_SHUTDOWN: 'The image service restarted before the request started; it will be retried.',
+  CANCELLED: 'Cancelled by the requester.',
+  ABORTED: 'The request was aborted.',
+};
+const GENERIC_FAILURE = 'Image generation failed. Please try again.';
+
+/**
+ * User-facing failure text. The processor-supplied message is never echoed: provider error bodies can carry account,
+ * organisation or key fragments, so only fixed texts keyed by the (allow-listed) error code reach the user.
+ * @param {string} code (a message argument, if any, is deliberately ignored)
+ */
+export function humanFailure(code) {
+  return PROVIDER_MESSAGES[code] ?? PROCESSOR_MESSAGES[code] ?? GENERIC_FAILURE;
 }
 
 /** POST /api/processor/jobs/:jobId/fail — body {node, code, message, retryable, providerCalled}. */
@@ -273,8 +321,11 @@ export async function fail({ request, env, db, params, now }) {
   const node = readNode(body);
   const job = await leasedJob(db, params.jobId, node);
   const code = String(body.code || 'PROCESSOR_ERROR').slice(0, 64);
-  const providerCalled = body.providerCalled === true;
-  const message = humanFailure(code, body.message);
+  // A job already in "saving" has a finished paid call whatever the processor claims now: it is never requeued (no double
+  // spend) and its reservation is settled, not released. ("generating" keeps the processor's word: a connect failure before
+  // any byte was sent is legitimately retryable.)
+  const providerCalled = body.providerCalled === true || job.status === 'saving';
+  const message = humanFailure(code);
   const cancelled = !!job.cancel_requested || code === 'CANCELLED';
   const requeue = !cancelled && body.retryable === true && !providerCalled && job.attempts < job.max_attempts;
   const guard = "WHERE id = ? AND lease_owner = ? AND status IN ('claimed','preparing','generating','saving')";

@@ -25,7 +25,8 @@ beforeEach(() => {
 });
 
 let seq = 0;
-const svc = (handler, o) => call(handler, t.env, { actor: service(), method: 'POST', ...o });
+// Raw endpoints must identify the node (X-L1-Node); a request without it is rejected (see worker/test/security).
+const svc = (handler, o) => call(handler, t.env, { actor: service(), method: 'POST', ...o, headers: { 'X-L1-Node': 'k8', ...o?.headers } });
 const claim = (node = 'k8', kinds, now = NOW) => svc(processor.claim, { body: { node, kinds }, now });
 const heartbeat = (id, body, now = NOW) => svc(processor.heartbeat, { body, params: { jobId: id }, now });
 const output = (id, variant, bytes, o) => svc(processor.putOutput, { method: 'PUT', raw: bytes, params: { jobId: id, variant }, ...o });
@@ -310,7 +311,7 @@ describe('fail', () => {
     expect(job(id).attempts).toBe(2);
     const res = await fail(id, { node: 'k8', code: 'network_error', message: 'boom', retryable: true, providerCalled: false });
     expect((await jsonOf(res)).willRetry).toBe(false);
-    expect(job(id)).toMatchObject({ status: 'failed', completed_at: NOW, error_message: 'boom' });
+    expect(job(id)).toMatchObject({ status: 'failed', completed_at: NOW, error_message: 'Image generation failed. Please try again.' });
     expect(ledger(id).state).toBe('released');
   });
 
@@ -338,7 +339,8 @@ describe('fail', () => {
       expect(job(id).status).toBe('failed');
       t.db.sqlite.prepare("UPDATE generation_jobs SET status = 'completed' WHERE id = ?").run(id);
     }
-    expect((await import('../../src/processor.js')).humanFailure('weird', 'x'.repeat(500))).toHaveLength(300);
+    // Processor-supplied text is never echoed to users: unknown codes get the generic message.
+    expect((await import('../../src/processor.js')).humanFailure('weird', 'x'.repeat(500))).toMatch(/failed/);
     expect((await import('../../src/processor.js')).humanFailure('weird')).toMatch(/failed/);
   });
 
