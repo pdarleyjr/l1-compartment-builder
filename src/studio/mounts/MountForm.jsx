@@ -37,7 +37,7 @@ function ToolPicker({ rows, value, onChange }) {
  * @param {{compId:string, session:object, plannerDoc:object|null, form:object, setForm:(f:object)=>void, saving:boolean, error:string,
  *   onSave:()=>void, onCancel:()=>void}} props
  */
-export function MountForm({ compId, session, plannerDoc, form, setForm, saving, error, onSave, onCancel }) {
+export function MountForm({ compId, session, plannerDoc, plannerRevision, form, setForm, saving, error, onSave, onCancel }) {
   const [capture, setCapture] = useState(false);
   const [pick, setPick] = useState(false);
   const { assets } = useAssets(compId);
@@ -78,6 +78,11 @@ export function MountForm({ compId, session, plannerDoc, form, setForm, saving, 
           ))}
         </div>
       </fieldset>
+      {form.classification === 'inventory' && (
+        <label><span className={LABEL}>Inventory item *</span>
+          <select className={INPUT} value={form.equipmentId} onChange={set('equipmentId')} data-testid="mount-equipment" required>
+            <option value="">Choose the inventory item…</option>{rows.map(r => <option key={r.equipmentId} value={r.equipmentId}>{r.name}</option>)}</select></label>
+      )}
       <label><span className={LABEL}>Status</span>
         <select className={INPUT} value={form.status} onChange={set('status')}>{MOUNT_STATUSES.map(s => <option key={s} value={s}>{STATUS_LABELS[s]}</option>)}</select></label>
 
@@ -98,7 +103,7 @@ export function MountForm({ compId, session, plannerDoc, form, setForm, saving, 
             ))}
           </ul>
         )}
-        {capture && <CapturePanel compId={compId} session={session} plannerDoc={plannerDoc} defaultCategory="mount"
+        {capture && <CapturePanel compId={compId} session={session} plannerDoc={plannerDoc} plannerRevision={plannerRevision} defaultCategory="mount"
           onAssetsCommitted={list => { if (list[0]) { setForm({ ...form, assetId: list[0].id }); setCapture(false); } }} />}
       </section>
 

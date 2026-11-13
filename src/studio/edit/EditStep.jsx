@@ -38,7 +38,7 @@ export default function EditStep({ compId, session, plannerDoc, jobsState, versi
     return () => { alive = false; };
   }, [compId, preset, parentId]);
 
-  const base = useMemo(() => ({ kind: 'render', mode: 'edit', preset, parentVersionId: parentId, instructions: text.trim() || undefined, referenceAssetId: refAsset?.id }), [preset, parentId, text, refAsset]);
+  const base = useMemo(() => ({ kind: 'render', mode: 'edit', preset, parentVersionId: parentId, instructions: text.trim() || undefined, referenceAssetIds: refAsset ? [refAsset.id] : undefined }), [preset, parentId, text, refAsset]);
 
   const submit = async confirmUsd => {
     if (guard.current || !parentId) return;

@@ -220,7 +220,7 @@ describe('estimate', () => {
   it('returns the same estimate as createJob without reserving or inserting, even when AI is off', async () => {
     const est = await call(jobs.estimate, t.env, { method: 'POST', body: { kind: 'render', preset: 'max' }, params: { compId: 'LS1' } });
     expect(est.status).toBe(200);
-    expect(await jsonOf(est)).toMatchObject({ estimate: { usd: 1.2 }, model: 'gpt-image-2.6-sunburst', size: '1536x1024', confirmRequired: true });
+    expect(await jsonOf(est)).toMatchObject({ estimate: { usd: 1.2 }, model: 'gpt-image-2.6-sunburst', size: '1536x1024', requiresConfirm: true });
     setSetting(t.db, 'ai.enabled', false);
     expect((await call(jobs.estimate, t.env, { method: 'POST', body: { kind: 'render', preset: 'preview' }, params: { compId: 'LS1' } })).status).toBe(200);
     expect(t.db.one('SELECT COUNT(*) AS n FROM generation_jobs').n).toBe(0);

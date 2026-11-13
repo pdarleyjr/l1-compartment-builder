@@ -2,11 +2,7 @@
 // One FakeApi = one "server" (planner document with revisions, galleries, main images, assets). Install it on one or
 // more pages/contexts (= devices); each install returns a device handle with its own session and failure switches.
 // Nothing here talks to the network; every image is a synthetic 1×1 PNG.
-import * as realPlanner from '../../shared/planner.js';
-import * as shimPlanner from './planner-shim.js';
-
-// Use the real op engine once part C has implemented it; until then the test shim (same contract).
-const planner = (() => { try { realPlanner.emptyDocV2(); return realPlanner; } catch { return shimPlanner; } })();
+import * as planner from '../../shared/planner.js'; // the real op engine (shared with the Worker and the browser client)
 
 export const TINY_PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=';
 export const COMP_IDS = ['CabRearZone', 'LS1', 'LS2', 'LS3', 'LS4', 'RS1', 'RS2', 'RS3', 'RS4', 'RS5', 'RR1'];
@@ -154,7 +150,7 @@ export class FakeApi {
       const cur = this.mains[m[1]]?.revision ?? 0;
       if (expectRevision !== cur) return err(route, 409, 'REVISION_CONFLICT', 'The main image changed on another device.');
       this.setMain(m[1], { kind, ref, provenance: kind === 'preset' ? 'user_photo' : (this.assets.get(ref)?.provenance ?? 'user_photo') });
-      return json(route, 200, this.#mainBody(m[1]));
+      return json(route, 200, { main: this.#mainBody(m[1]) });
     }
     if (method === 'DELETE' && (m = path.match(/^\/assets\/([^/]+)$/))) {
       if (denied()) return;

@@ -90,9 +90,10 @@ on the host so sheet labels render.
    before enabling the `max` preset; the 400 would come back as terminal `PROVIDER_REJECTED`.
 2. Markup on 2.6: the edit reference says markup is "supported on GPT Image 2.5 only", the guide shows it on `gpt-image-2.6-flare`.
 3. No documented per-file byte limit for edit inputs; the processor keeps inputs small by design.
-4. The claim payload shape beyond the contract: the processor reads `job.{id,kind,model,quality,complexity,size,outputFormat|output_format,prompt,moderation?}`,
-   `references[].{url,role,label,sheet?}` (`role`: `parent|compartment|tool|mount|markup|subject|…`; recognize/verify use `subject`),
-   `spec.candidates:[{equipmentId,name}]` for recognize, and optional `maxReferences`. Output usage is forwarded verbatim (OpenAI snake_case).
+4. The claim payload is fixed by the architecture doc §15: `job.{id,kind,mode,model,quality,complexity,size,outputFormat,prompt,attempts,moderation:'auto'}`,
+   `references[].{assetId,url,role,label,sheet}` (`role`: `compartment|parent|markup|tool|mount|arrangement|other|subject`; `sheet` = contact-sheet label,
+   `null` = send directly; recognize/verify use `subject`), `spec.candidates:[{equipmentId,name}]` for recognize, `maxReferences`, `leaseExpiresAt`.
+   Every request carries `X-L1-Node` (raw endpoints have no body). Output usage is forwarded verbatim (OpenAI snake_case).
 
 ## 3. Install, update, rollback
 

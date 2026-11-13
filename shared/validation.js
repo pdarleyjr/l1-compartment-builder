@@ -91,10 +91,11 @@ export function validateAssetCreate(body) {
   });
 }
 
-/** PATCH /api/assets/:id body: at least one of title, notes, category. */
+/** PATCH /api/assets/:id body: at least one of title, notes, category, plus expectRevision (read by the handler). */
 export function validateAssetUpdate(body) {
   return guard(() => {
-    const b = object(body, 'body', ['title', 'notes', 'category']);
+    const b = object(body, 'body', ['title', 'notes', 'category', 'expectRevision']);
+    int(b.expectRevision, 'expectRevision', 0, Number.MAX_SAFE_INTEGER, true);
     const out = drop({
       title: str(b.title, 'title', { max: ASSET_LIMITS.titleMax, optional: true, nullable: true }),
       notes: str(b.notes, 'notes', { max: ASSET_LIMITS.notesMax, optional: true, nullable: true }),
@@ -135,11 +136,16 @@ export function validateLinks(body) {
   });
 }
 
-/** Mount create (all required fields) or partial update body. `links` = mount_links targets. */
+/**
+ * Mount create (name required) or partial update body (+ expectRevision, read by the handler). Canonical payload:
+ * {name, manufacturer?, model?, description?, dimensions?, orientation?, zone?, capacity?, classification, status, equipmentId?, notes?,
+ * links:[{targetType:'equipment'|'assignment'|'asset', targetId}]}.
+ */
 export function validateMount(body, { partial = false } = {}) {
   return guard(() => {
     const b = object(body, 'body', ['name', 'manufacturer', 'model', 'description', 'dimensions', 'orientation', 'zone', 'capacity',
-      'classification', 'status', 'equipmentId', 'notes', 'links']);
+      'classification', 'status', 'equipmentId', 'notes', 'links', 'expectRevision']);
+    int(b.expectRevision, 'expectRevision', 0, Number.MAX_SAFE_INTEGER, true);
     if (!partial && b.name === undefined) bad('name is required');
     const text = (k, max) => str(b[k], k, { max, optional: true, nullable: true });
     if (b.links !== undefined && (!Array.isArray(b.links) || b.links.length > 100)) bad('links must be an array of at most 100');
@@ -166,33 +172,27 @@ export function validateMount(body, { partial = false } = {}) {
 }
 
 /**
- * PUT design body: {expectRevision, layout:{zones?, placements?, notes?}} — the layout fields may also be given flat.
- * Normalized to {expectRevision, layout}.
+ * PUT design body: {layout:{placements:[{targetType:'assignment'|'equipment'|'mount', targetId, zone, orientation?, notes?}], notes?},
+ * expectRevision}. Normalized to the same shape.
  */
+export const PLACEMENT_TARGETS = Object.freeze(['assignment', 'equipment', 'mount']);
 export function validateDesign(body) {
   return guard(() => {
-    if (!isObj(body)) bad('body must be an object');
-    const { expectRevision, layout: nested, ...flat } = body;
-    const layoutIn = nested ?? flat;
-    if (nested !== undefined && Object.keys(flat).length) bad('give layout fields either nested or flat, not both');
-    const l = object(layoutIn, 'layout', ['zones', 'placements', 'notes']);
-    const zones = l.zones ?? [];
-    if (!Array.isArray(zones) || zones.length > 30) bad('zones must be an array of at most 30');
+    const { expectRevision, layout: layoutIn } = object(body, 'body', ['layout', 'expectRevision']);
+    const l = object(layoutIn, 'layout', ['placements', 'notes']);
     const placements = l.placements ?? [];
     if (!Array.isArray(placements) || placements.length > 300) bad('placements must be an array of at most 300');
     return {
       expectRevision: int(expectRevision, 'expectRevision', 0, Number.MAX_SAFE_INTEGER),
       layout: drop({
-        zones: zones.map((z, i) => { const s = str(z, `zones[${i}]`, { max: 40, min: 1 }); if (!ZONE.test(s)) bad(`zones[${i}] has invalid characters`); return s; }),
         placements: placements.map((p, i) => {
           const n = `placements[${i}]`;
-          const x = object(p, n, ['targetType', 'targetId', 'zone', 'orientation', 'x', 'y', 'w', 'h', 'notes']);
-          const targetType = oneOf(x.targetType, `${n}.targetType`, LINK_TARGETS);
-          if (typeof x.targetId !== 'string' || !(targetType === 'bundle' ? BUNDLE_ID : ID_PATTERN).test(x.targetId)) bad(`${n}.targetId is invalid`);
+          const x = object(p, n, ['targetType', 'targetId', 'zone', 'orientation', 'notes']);
+          const targetType = oneOf(x.targetType, `${n}.targetType`, PLACEMENT_TARGETS);
+          if (typeof x.targetId !== 'string' || !ID_PATTERN.test(x.targetId)) bad(`${n}.targetId is invalid`);
           const zone = str(x.zone, `${n}.zone`, { max: 40, min: 1 });
           if (!ZONE.test(zone)) bad(`${n}.zone has invalid characters`);
-          const geo = Object.fromEntries(['x', 'y', 'w', 'h'].filter(k => x[k] !== undefined).map(k => [k, numRange(x[k], `${n}.${k}`, 0, 1)]));
-          return drop({ targetType, targetId: x.targetId, zone, orientation: oneOf(x.orientation, `${n}.orientation`, ORIENTATIONS, true), ...geo, notes: str(x.notes, `${n}.notes`, { max: 500, optional: true }) });
+          return drop({ targetType, targetId: x.targetId, zone, orientation: oneOf(x.orientation, `${n}.orientation`, ORIENTATIONS, true), notes: str(x.notes, `${n}.notes`, { max: 500, optional: true }) });
         }),
         notes: str(l.notes, 'notes', { max: ASSET_LIMITS.notesMax, optional: true }),
       }),
@@ -200,10 +200,19 @@ export function validateDesign(body) {
   });
 }
 
+export const MAX_REFERENCE_ASSETS = 4;
+function referenceIds(v) {
+  if (v === undefined) return undefined;
+  if (!Array.isArray(v) || v.length > MAX_REFERENCE_ASSETS) bad(`referenceAssetIds must be an array of at most ${MAX_REFERENCE_ASSETS} ids`);
+  const ids = v.map((x, i) => id(x, `referenceAssetIds[${i}]`));
+  if (new Set(ids).size !== ids.length) bad('referenceAssetIds must not repeat an id');
+  return ids;
+}
+
 /** POST /api/compartments/:id/jobs body. */
 export function validateJobRequest(body) {
   return guard(() => {
-    const b = object(body, 'body', ['kind', 'mode', 'preset', 'instructions', 'parentVersionId', 'markupAssetId', 'assetId', 'confirmEstimateUsd']);
+    const b = object(body, 'body', ['kind', 'mode', 'preset', 'instructions', 'parentVersionId', 'markupAssetId', 'assetId', 'referenceAssetIds', 'confirmEstimateUsd']);
     const kind = oneOf(b.kind, 'kind', JOB_KINDS.filter(k => k !== 'verify'));
     const out = drop({
       kind,
@@ -213,6 +222,7 @@ export function validateJobRequest(body) {
       parentVersionId: id(b.parentVersionId, 'parentVersionId', true),
       markupAssetId: id(b.markupAssetId, 'markupAssetId', true),
       assetId: id(b.assetId, 'assetId', true),
+      referenceAssetIds: referenceIds(b.referenceAssetIds),
       confirmEstimateUsd: b.confirmEstimateUsd === undefined ? undefined : numRange(b.confirmEstimateUsd, 'confirmEstimateUsd', 0, 10_000),
     });
     if (kind === 'recognize' && !out.assetId) bad('assetId is required for recognize');

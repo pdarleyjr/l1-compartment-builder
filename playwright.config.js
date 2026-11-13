@@ -3,9 +3,6 @@ import os from 'node:os';
 import path from 'node:path';
 import { chromium, defineConfig, devices } from '@playwright/test';
 
-// While shared/planner.js is still the unimplemented interface stub, the dev server aliases it to a test shim.
-const plannerIsStub = /NOT_IMPLEMENTED/.test(fs.readFileSync(new URL('./shared/planner.js', import.meta.url), 'utf8'));
-
 // Sandboxed workers cannot always start the full Chromium (crashpad) or may only have another revision cached. Use the
 // cached chromium_headless_shell binary when L1_HEADLESS_SHELL=1, when L1_CHROMIUM_PATH is set, or when the default
 // Chromium of this Playwright version is not installed.
@@ -41,6 +38,6 @@ export default defineConfig({
     command: 'npm run dev -- --host 127.0.0.1 --port 4173',
     url: 'http://127.0.0.1:4173',
     reuseExistingServer: false,
-    env: { ...process.env, L1_PLANNER_SHIM: plannerIsStub ? '1' : '0' },
+    env: { ...process.env },
   },
 });

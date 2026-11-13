@@ -27,8 +27,7 @@ export default function PublishStep({ compId, version, versionLabel, mainImage, 
     setBusy(true); setMessage('');
     try {
       const res = await api(path, { method: 'POST', json: body });
-      const main = res?.mainImage ?? res;
-      onMainImageChanged?.(main); onRefreshVersions?.(); setStale(false); toast(okText, 'success');
+      onMainImageChanged?.(res.main); onRefreshVersions?.(); setStale(false); toast(okText, 'success');
     } catch (e) {
       const o = classifyPublishError(e);
       if (o.kind === 'stale') setStale(true);

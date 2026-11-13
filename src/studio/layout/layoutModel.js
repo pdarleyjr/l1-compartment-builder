@@ -1,8 +1,13 @@
 // Pure layout model helpers for the Arrange step (part B2). No React, no I/O.
 import { DEFAULT_ZONES, ORIENTATIONS } from '../../../shared/contracts.js';
 
-/** @typedef {{kind:'tool'|'mount', ref:string, name:string, zone:string|null, orientation:string|null}} Placement */
-/** @typedef {{placements:Placement[], notes:string}} Layout */
+/**
+ * Canonical layout (docs/architecture "API payloads"): placements address planner/mount entities by id.
+ * @typedef {{targetType:'assignment'|'equipment'|'mount', targetId:string, zone:string, orientation?:string, notes?:string}} Placement
+ * @typedef {{placements:Placement[], notes:string}} Layout
+ * @typedef {{kind:'tool'|'mount', ref:string, name:string}} Item  UI item: a tool (ref = equipmentId) or a mount (ref = mount id)
+ */
+const PLACEABLE = ['assignment', 'equipment', 'mount'];
 
 export const ZONE_LABELS = {
   upper_shelf: 'Upper shelf', middle_shelf: 'Middle shelf', lower_tray: 'Lower tray', pull_out_tray: 'Pull-out tray',
@@ -23,27 +28,44 @@ export function toolItems(rows) {
   return [...map.values()].sort((a, b) => a.name.localeCompare(b.name));
 }
 
-/** Normalise whatever the server returned into a Layout. @param {any} raw @returns {Layout} */
+/** Placement target of a UI item. @param {{kind:string, ref:string}} item @returns {{targetType:'equipment'|'mount', targetId:string}} */
+export const targetOf = item => ({ targetType: item.kind === 'mount' ? 'mount' : 'equipment', targetId: item.ref });
+const sameTarget = (p, item) => { const t = targetOf(item); return p.targetType === t.targetType && p.targetId === t.targetId; };
+
+/** Normalise whatever the server returned into a Layout (canonical placements only). @param {any} raw @returns {Layout} */
 export function normalizeLayout(raw) {
-  const placements = Array.isArray(raw?.placements) ? raw.placements.filter(p => p && typeof p.ref === 'string').map(p => ({
-    kind: p.kind === 'mount' ? 'mount' : 'tool', ref: p.ref, name: String(p.name ?? p.ref),
-    zone: typeof p.zone === 'string' ? p.zone : null,
-    orientation: ORIENTATIONS.includes(p.orientation) ? p.orientation : null,
-  })) : [];
+  const placements = Array.isArray(raw?.placements)
+    ? raw.placements.filter(p => p && PLACEABLE.includes(p.targetType) && typeof p.targetId === 'string' && typeof p.zone === 'string' && p.zone)
+      .map(p => ({
+        targetType: p.targetType, targetId: p.targetId, zone: p.zone,
+        ...(ORIENTATIONS.includes(p.orientation) ? { orientation: p.orientation } : {}),
+        ...(typeof p.notes === 'string' && p.notes ? { notes: p.notes } : {}),
+      }))
+    : [];
   return { placements, notes: typeof raw?.notes === 'string' ? raw.notes : '' };
 }
 
-/** Return a layout with one item's zone/orientation changed (immutable). @param {Layout} layout @param {{kind:string, ref:string, name:string}} item @param {{zone?:string|null, orientation?:string|null}} patch */
+/** Body for PUT design: {layout}. Empty notes are omitted. @param {Layout} layout */
+export const layoutPayload = layout => ({ placements: layout.placements, ...(layout.notes ? { notes: layout.notes } : {}) });
+
+/**
+ * Return a layout with one item's zone/orientation changed (immutable). A placement needs a zone; clearing the zone
+ * removes it (orientation alone is not stored).
+ * @param {Layout} layout @param {Item} item @param {{zone?:string|null, orientation?:string|null}} patch
+ */
 export function setPlacement(layout, item, patch) {
-  const rest = layout.placements.filter(p => !(p.kind === item.kind && p.ref === item.ref));
-  const cur = layout.placements.find(p => p.kind === item.kind && p.ref === item.ref) ?? { kind: item.kind, ref: item.ref, name: item.name, zone: null, orientation: null };
-  const next = { ...cur, name: item.name, ...patch };
-  const keep = next.zone || next.orientation;
-  return { ...layout, placements: keep ? [...rest, next] : rest };
+  const rest = layout.placements.filter(p => !sameTarget(p, item));
+  const cur = layout.placements.find(p => sameTarget(p, item));
+  const zone = 'zone' in patch ? patch.zone : cur?.zone;
+  const orientation = 'orientation' in patch ? patch.orientation : cur?.orientation;
+  if (!zone) return { ...layout, placements: rest };
+  const next = { ...(cur ?? {}), ...targetOf(item), zone };
+  if (orientation) next.orientation = orientation; else delete next.orientation;
+  return { ...layout, placements: [...rest, next] };
 }
 
-/** @param {Layout} layout @param {{kind:string, ref:string}} item */
-export const placementOf = (layout, item) => layout.placements.find(p => p.kind === item.kind && p.ref === item.ref) ?? { zone: null, orientation: null };
+/** @param {Layout} layout @param {Item} item */
+export const placementOf = (layout, item) => layout.placements.find(p => sameTarget(p, item)) ?? { zone: null, orientation: null };
 
 /** Items per zone for the diagram. @returns {Record<string, Placement[]>} */
 export function itemsByZone(layout, zones) {
@@ -82,6 +104,6 @@ export function diagramModel(geometry, zones, maxEdge = 360) {
 
 /** True when two layouts differ (ignores placement order). */
 export function layoutDirty(a, b) {
-  const key = l => JSON.stringify({ n: l.notes, p: [...l.placements].sort((x, y) => (x.kind + x.ref).localeCompare(y.kind + y.ref)) });
+  const key = l => JSON.stringify({ n: l.notes, p: [...l.placements].sort((x, y) => (x.targetType + x.targetId).localeCompare(y.targetType + y.targetId)) });
   return key(a) !== key(b);
 }

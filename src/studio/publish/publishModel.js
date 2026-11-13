@@ -21,12 +21,9 @@ export function publishBody(version, main, acknowledgeStale = false) {
   return body;
 }
 
-/** Pull one compartment's main image out of a (shape-tolerant) public main-images response. @returns {object|null} */
+/** One compartment's main image from GET /api/public/main-images ({mainImages:{[compId]:MainImage}}). @returns {object|null} */
 export function extractMain(res, compId) {
-  const list = Array.isArray(res) ? res : Array.isArray(res?.mainImages) ? res.mainImages : null;
-  if (list) return list.find(m => m?.compartmentId === compId) ?? null;
-  const map = res?.mainImages ?? res;
-  return map && typeof map === 'object' ? map[compId] ?? null : null;
+  return res?.mainImages?.[compId] ?? null;
 }
 
 /** Can this version be published? Rejected/deleted cannot. */

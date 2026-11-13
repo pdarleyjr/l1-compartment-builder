@@ -37,9 +37,9 @@ function Tile({ asset, selectable, selected, onOpen, onSelect }) {
 
 /**
  * Photo library for one compartment: category filter, thumbnail grid, detail sheet, link editor, delete with 10 s undo.
- * @param {{compId:string, session?:object, plannerDoc:object|null, onSelect?:(asset:object)=>void, selectable?:boolean, filterCategory?:string}} props
+ * @param {{compId:string, session?:object, plannerDoc:object|null, plannerRevision?:number, onSelect?:(asset:object)=>void, selectable?:boolean, filterCategory?:string}} props
  */
-export function AssetLibrary({ compId, session, plannerDoc, onSelect, selectable = false, filterCategory }) {
+export function AssetLibrary({ compId, session, plannerDoc, plannerRevision, onSelect, selectable = false, filterCategory }) {
   const { assets, loading, error, reload, replace, drop } = useAssets(compId);
   const [tab, setTab] = useState(filterCategory ?? 'all');
   const [detail, setDetail] = useState(null);
@@ -94,7 +94,7 @@ export function AssetLibrary({ compId, session, plannerDoc, onSelect, selectable
       )}
       <AssetDetail asset={detail} open={!!detail} onClose={() => setDetail(null)} onSaved={a => { replace(a); setDetail(null); }} onDelete={remove}
         onEditLinks={a => { setDetail(null); setLinking(a); }} />
-      <AssociationDialog compId={compId} session={session} asset={linking} plannerDoc={plannerDoc} open={!!linking} onClose={() => setLinking(null)}
+      <AssociationDialog compId={compId} session={session} asset={linking} plannerDoc={plannerDoc} plannerRevision={plannerRevision} open={!!linking} onClose={() => setLinking(null)}
         onSaved={() => { setLinking(null); reload(); }} />
     </section>
   );

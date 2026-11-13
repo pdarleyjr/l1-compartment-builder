@@ -123,23 +123,20 @@ export function diffValues(from, to, path = '') {
   return [{ path: path || '(value)', from, to }];
 }
 
-/** Shape-tolerant GET /admin/settings → {key:{value,revision}} with defaults filled in. */
+/** GET /admin/settings → {settings:{[key]:{value, revision, default}}}. Returns {key:{value, revision}} (defaults fill gaps). */
 export function normalizeSettings(res) {
-  const raw = res?.settings ?? res ?? {};
-  const entries = Array.isArray(raw) ? Object.fromEntries(raw.map(r => [r.key, r])) : raw;
+  const raw = res?.settings ?? {};
   const out = {};
   for (const key of Object.keys(SETTINGS_DEFAULTS)) {
-    const e = entries[key];
-    const wrapped = e && typeof e === 'object' && !Array.isArray(e) && 'value' in e && ('revision' in e || Object.keys(e).length <= 4);
-    out[key] = wrapped ? { value: e.value, revision: Number(e.revision ?? 0) } : { value: e === undefined ? SETTINGS_DEFAULTS[key] : e, revision: Number(res?.revisions?.[key] ?? 0) };
+    const e = raw[key];
+    out[key] = e ? { value: e.value, revision: Number(e.revision ?? 0) } : { value: SETTINGS_DEFAULTS[key], revision: 0 };
   }
   return out;
 }
 
-/** @param {any} res GET .../history response @returns {{revision:number, value:any, changedBy?:string, changedAt?:number}[]} newest first */
+/** @param {{history:{revision:number, value:any, updatedBy?:string, updatedAt?:number}[]}} res GET .../history response @returns {object[]} newest first */
 export function normalizeHistory(res) {
-  const list = Array.isArray(res) ? res : Array.isArray(res?.history) ? res.history : [];
-  return [...list].sort((a, b) => (b.revision ?? 0) - (a.revision ?? 0));
+  return [...(res?.history ?? [])].sort((a, b) => (b.revision ?? 0) - (a.revision ?? 0));
 }
 
 /** Short display of a JSON value for diffs. */

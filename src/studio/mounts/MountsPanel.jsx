@@ -6,13 +6,13 @@ import { BTN_DANGER, BTN_PRIMARY, BTN_SECONDARY, CARD, CHIP } from '../capture/s
 import { MountForm } from './MountForm.jsx';
 import { CLASSIFICATION_INFO, MOUNT_DISCLAIMER, STATUS_LABELS, emptyMount, formToPayload, mountToForm, validateMountForm } from './mount-constants.js';
 
-const unwrap = r => (Array.isArray(r) ? r : r?.mounts ?? []);
+const unwrap = r => r.mounts;
 
 /**
  * Mounts for one compartment: list, create/edit (own sheet), delete with confirm.
- * @param {{compId:string, session:object, plannerDoc:object|null}} props
+ * @param {{compId:string, session:object, plannerDoc:object|null, plannerRevision?:number}} props
  */
-export function MountsPanel({ compId, session, plannerDoc }) {
+export function MountsPanel({ compId, session, plannerDoc, plannerRevision }) {
   const [state, setState] = useState({ mounts: [], loading: true, error: '' });
   const [editing, setEditing] = useState(null); // {id|null, form}
   const [saving, setSaving] = useState(false);
@@ -31,7 +31,7 @@ export function MountsPanel({ compId, session, plannerDoc }) {
     setSaving(true); setFormError('');
     try {
       const body = formToPayload(editing.form);
-      if (editing.id) await api(`/mounts/${editing.id}`, { method: 'PATCH', json: body });
+      if (editing.id) await api(`/mounts/${editing.id}`, { method: 'PATCH', json: { ...body, expectRevision: editing.revision } });
       else await api(`/compartments/${encodeURIComponent(compId)}/mounts`, { method: 'POST', json: body });
       setEditing(null); await load();
     } catch (e) { setFormError(e?.message || 'Could not save the mount.'); } finally { setSaving(false); }
@@ -60,7 +60,7 @@ export function MountsPanel({ compId, session, plannerDoc }) {
                 <h3 className="text-sm font-bold text-slate-800 break-words">{m.name || 'Untitled mount'}</h3>
                 <p className="text-xs text-slate-500 break-words">{[m.manufacturer, m.model].filter(Boolean).join(' · ') || 'No manufacturer or model'}</p>
               </div>
-              <button type="button" className={BTN_SECONDARY} onClick={() => { setFormError(''); setEditing({ id: m.id, form: mountToForm(m) }); }} aria-label={`Edit ${m.name || 'mount'}`}><Pencil size={14} aria-hidden="true" /></button>
+              <button type="button" className={BTN_SECONDARY} onClick={() => { setFormError(''); setEditing({ id: m.id, revision: m.revision, form: mountToForm(m) }); }} aria-label={`Edit ${m.name || 'mount'}`}><Pencil size={14} aria-hidden="true" /></button>
               <button type="button" className={BTN_DANGER} onClick={() => setDeleting(m)} aria-label={`Delete ${m.name || 'mount'}`}><Trash2 size={14} aria-hidden="true" /></button>
             </div>
             <div className="flex flex-wrap gap-1">
@@ -74,7 +74,7 @@ export function MountsPanel({ compId, session, plannerDoc }) {
         ))}
       </ul>
       <Modal open={!!editing} onClose={() => setEditing(null)} title={editing?.id ? 'Edit mount' : 'Add mount'} wide testId="mount-dialog">
-        {editing && <MountForm compId={compId} session={session} plannerDoc={plannerDoc} form={editing.form} setForm={f => setEditing(e => ({ ...e, form: f }))}
+        {editing && <MountForm compId={compId} session={session} plannerDoc={plannerDoc} plannerRevision={plannerRevision} form={editing.form} setForm={f => setEditing(e => ({ ...e, form: f }))}
           saving={saving} error={formError} onSave={save} onCancel={() => setEditing(null)} />}
       </Modal>
       <Modal open={!!deleting} onClose={() => setDeleting(null)} title="Delete mount?" testId="mount-delete-dialog"

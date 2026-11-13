@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as links from '../../src/links.js';
 import * as mounts from '../../src/mounts.js';
 import * as designs from '../../src/designs.js';
-import { EQ, call, insertAsset, jsonOf, makeEnv, setSetting, editor } from './helpers/harness.js';
+import { EQ, call, insertAsset, jsonOf, makeEnv, editor } from './helpers/harness.js';
 import { resetIds } from './helpers/fakes.js';
 
 vi.mock('../../../shared/ids.js', async () => (await import('./helpers/fakes.js')).idsFake);
@@ -153,22 +153,20 @@ describe('designs', () => {
   const putD = (body, comp = 'LS1', o) => call(designs.putDesign, t.env, { method: 'PUT', body, params: { compId: comp }, ...o });
   const getD = (comp = 'LS1') => call(designs.getDesign, t.env, { params: { compId: comp } });
 
-  it('returns a default layout from the geometry zones (with admin overrides) when none is stored', async () => {
-    expect((await jsonOf(await getD())).design).toMatchObject({ revision: 0, layout: { zones: ['upper_shelf', 'floor'], placements: [] } });
-    setSetting(t.db, 'compartments.overrides', { LS1: { zones: ['custom'] } });
-    expect((await jsonOf(await getD())).design.layout.zones).toEqual(['custom']);
+  it('returns an empty canonical layout at revision 0 when none is stored', async () => {
+    expect((await jsonOf(await getD())).design).toMatchObject({ revision: 0, layout: { placements: [] } });
     expect((await getD('NOPE')).status).toBe(404);
   });
 
   it('saves with expectRevision CAS and rejects stale writers', async () => {
     const mountRes = await call(mounts.createMount, t.env, { method: 'POST', body: { name: 'Tray' }, params: { compId: 'LS1' } });
     const mountId = (await jsonOf(mountRes)).mount.id;
-    const layout = { zones: ['floor'], placements: [{ targetType: 'assignment', targetId: 'as_ls1_s0', zone: 'floor' }, { targetType: 'mount', targetId: mountId, zone: 'floor' }, { targetType: 'equipment', targetId: EQ.axe, zone: 'floor' }] };
+    const layout = { placements: [{ targetType: 'assignment', targetId: 'as_ls1_s0', zone: 'floor' }, { targetType: 'mount', targetId: mountId, zone: 'floor' }, { targetType: 'equipment', targetId: EQ.axe, zone: 'floor' }] };
     const first = await putD({ layout, expectRevision: 0 });
     expect(first.status).toBe(200);
     expect((await jsonOf(first)).design.revision).toBe(1);
     expect((await putD({ layout, expectRevision: 0 })).status).toBe(409);
-    expect((await jsonOf(await putD({ layout: { zones: [], placements: [] }, expectRevision: 1 }, 'LS1', { actor: editor('b@x') }))).design.revision).toBe(2);
+    expect((await jsonOf(await putD({ layout: { placements: [] }, expectRevision: 1 }, 'LS1', { actor: editor('b@x') }))).design.revision).toBe(2);
     expect((await putD({ layout, expectRevision: 1 })).status).toBe(409);
     expect((await jsonOf(await getD())).design).toMatchObject({ revision: 2, updatedBy: 'b@x' });
     expect(t.db.one("SELECT COUNT(*) AS n FROM audit_log WHERE action = 'design.update'").n).toBe(2);
@@ -181,9 +179,11 @@ describe('designs', () => {
       { targetType: 'mount', targetId: 'mt_nope' },
       { targetType: 'asset', targetId: 'ast_a' },
     ];
-    for (const p of bad) expect((await putD({ layout: { zones: [], placements: [p] }, expectRevision: 0 })).status).toBe(400);
-    expect((await putD({ layout: { zones: [], placements: [] } })).status).toBe(400);
+    for (const p of bad) { const r = await putD({ layout: { placements: [{ zone: 'floor', ...p }] }, expectRevision: 0 }); expect([p, r.status, await r.clone().text()]).toEqual([p, 400, expect.anything()]); }
+    expect((await putD({ layout: { placements: [] } })).status).toBe(400);
     expect((await putD({ layout: 'nope', expectRevision: 0 })).status).toBe(400);
+    expect((await putD({ layout: { zones: ['floor'], placements: [] }, expectRevision: 0 })).status).toBe(400); // zones are not part of the layout
+    expect((await putD({ placements: [], expectRevision: 0 })).status).toBe(400); // flat form is not canonical
     expect(t.db.one('SELECT COUNT(*) AS n FROM designs').n).toBe(0);
   });
 });

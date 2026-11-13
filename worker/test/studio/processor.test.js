@@ -63,7 +63,10 @@ describe('claim', () => {
     expect(body.job.prompt).toContain('LS1');
     expect(body.spec).toMatchObject({ schema: 'l1.scene/1' });
     expect(body.spec.request).toBeUndefined();
-    expect(body.references).toEqual([{ assetId: 'ast_1', variant: 'original', role: 'tool', label: 'Tool', url: `/api/processor/assets/ast_1/original?job=${a}` }]);
+    expect(body.job.moderation).toBe('auto');
+    expect(body.maxReferences).toBe(10);
+    expect(body).not.toHaveProperty('contactSheets'); // sheet items are flattened into references
+    expect(body.references).toEqual([{ assetId: 'ast_1', role: 'tool', label: 'Tool', url: `/api/processor/assets/ast_1/original?job=${a}`, sheet: null }]);
     expect(body.leaseExpiresAt).toBe(NOW + 5 + JOB_TIMING.leaseMs);
     expect(job(a)).toMatchObject({ status: 'claimed', lease_owner: 'k8', attempts: 1, heartbeat_at: NOW + 5 });
     expect(job(b).status).toBe('queued');
@@ -76,8 +79,13 @@ describe('claim', () => {
     for (let i = 0; i < 4; i += 1) insertAsset(t, `ast_${i}`, 'LS1');
     await newJob();
     const body = await jsonOf(await claim());
-    expect(body.references).toHaveLength(2);
-    expect(body.contactSheets[0].items.map(i => i.assetId)).toEqual(['ast_2', 'ast_3']);
+    expect(body.maxReferences).toBe(2);
+    expect(body.references).toHaveLength(4);
+    expect(body.references.filter(r => r.sheet === null).map(r => r.assetId)).toEqual(['ast_0', 'ast_1']);
+    const sheeted = body.references.filter(r => r.sheet !== null);
+    expect(sheeted.map(r => r.assetId).sort()).toEqual(['ast_2', 'ast_3']);
+    expect(new Set(sheeted.map(r => r.sheet)).size).toBe(1);
+    expect(sheeted.every(r => typeof r.role === 'string' && r.url.includes('/api/processor/assets/'))).toBe(true);
   });
 
   it('honours kinds, next_attempt_at backoff and cancel_requested; validates the body', async () => {

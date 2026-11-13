@@ -18,7 +18,7 @@ export function buildCarouselItems({ main, presets, items }) {
     list.push({ key: `preset:${p.src}`, src: p.src, title: p.title, provenance: 'preset', isMain: false, deletable: false, kind: 'preset', ref: p.src });
   }
   for (const it of items) {
-    if (matches(it)) continue;
+    if (it.kind === 'preset' || matches(it)) continue; // presets come from `presets`
     list.push({ key: `asset:${it.key}`, src: it.url, title: it.title, provenance: it.provenance, isMain: false, deletable: it.deletable, kind: it.kind, ref: it.id, id: it.id });
   }
   return list;

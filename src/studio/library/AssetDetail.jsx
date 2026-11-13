@@ -30,8 +30,8 @@ export function AssetDetail({ asset, open, onClose, onSaved, onEditLinks, onDele
   const save = async () => {
     setSaving(true); setError('');
     try {
-      const res = await api(`/assets/${asset.id}`, { method: 'PATCH', json: { title: title.trim() || null, notes: notes.trim() || null, ...(editable ? { category } : {}) } });
-      onSaved(res?.asset ?? { ...asset, title: title.trim() || null, notes: notes.trim() || null, category });
+      const res = await api(`/assets/${asset.id}`, { method: 'PATCH', json: { title: title.trim() || null, notes: notes.trim() || null, ...(editable ? { category } : {}), expectRevision: asset.revision } });
+      onSaved(res.asset);
     } catch (e) { setError(e instanceof ApiError ? e.message : 'Could not save changes.'); } finally { setSaving(false); }
   };
 

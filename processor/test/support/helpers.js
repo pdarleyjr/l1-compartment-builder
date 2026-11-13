@@ -83,9 +83,11 @@ export function captureLogger() {
 }
 
 export const claimFor = (url, over = {}, refIds = []) => ({
-  job: { id: 'gj_job1', kind: 'render', model: 'gpt-image-2.6-flare', quality: 'low', complexity: 'medium', size: '1024x768', outputFormat: 'png', prompt: 'A tidy compartment', ...over.job },
+  job: { id: 'gj_job1', kind: 'render', model: 'gpt-image-2.6-flare', quality: 'low', complexity: 'medium', size: '1024x768', outputFormat: 'png', prompt: 'A tidy compartment', attempts: 1, moderation: 'auto', ...over.job },
   spec: over.spec || { schema: 'l1.scene/1' },
-  references: refIds.map(([assetId, role, label, extra]) => ({ assetId, variant: 'display', role, label, url: `/api/processor/assets/${assetId}/display`, ...extra })),
+  // canonical claim payload: {assetId, url, role, label, sheet} (docs/architecture "API payloads")
+  references: refIds.map(([assetId, role, label, extra]) => ({ assetId, url: `/api/processor/assets/${assetId}/original?job=gj_job1`, role, label, sheet: null, ...extra })),
+  maxReferences: over.maxReferences ?? 10,
   leaseExpiresAt: Date.now() + 120000,
 });
 

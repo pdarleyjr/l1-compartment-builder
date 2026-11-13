@@ -17,25 +17,16 @@ export const PROVENANCE_LABEL = Object.freeze({
  *   provenance:string, deletable:boolean}} GalleryItem
  */
 
-const isObj = v => v !== null && typeof v === 'object';
-
 function toMain(m, compId) {
-  if (!isObj(m) || typeof m.url !== 'string') return null;
-  return {
-    compartmentId: m.compartmentId ?? compId, revision: Number.isInteger(m.revision) ? m.revision : 0,
-    kind: m.kind ?? 'asset', ref: String(m.ref ?? ''), url: m.url, thumbUrl: m.thumbUrl ?? null,
-    provenance: m.provenance ?? 'user_photo', stale: m.stale === true,
-  };
+  if (!m) return null;
+  return { ...m, compartmentId: m.compartmentId ?? compId, thumbUrl: m.thumbUrl ?? null, stale: m.stale === true };
 }
 
-function toItem(it, i) {
-  const url = it?.url ?? it?.variants?.display ?? it?.variants?.original;
-  if (typeof url !== 'string') return null;
-  const id = typeof it.id === 'string' ? it.id : null;
+/** Gallery item (server: {id, kind, url, thumbUrl, title, provenance, status?}); `deletable` = a deletable uploaded photo. */
+function toItem(it) {
   return {
-    key: id ?? `item-${i}`, id, kind: it.kind ?? 'asset', url, thumbUrl: it.thumbUrl ?? it.variants?.thumb ?? null,
-    title: String(it.title ?? it.fileName ?? 'Photo'), provenance: it.provenance ?? 'user_photo',
-    deletable: it.deletable !== false && !!id && (it.kind ?? 'asset') === 'asset',
+    key: `${it.kind}:${it.id}`, id: it.id, kind: it.kind, url: it.url, thumbUrl: it.thumbUrl ?? null,
+    title: it.title ?? 'Photo', provenance: it.provenance, status: it.status, deletable: it.kind === 'asset',
   };
 }
 
@@ -51,10 +42,7 @@ function publish(next) { mainCache = next; listeners.forEach(l => l(mainCache));
 export function loadMainImages({ force = false } = {}) {
   if (!mainPromise || force) {
     mainPromise = api('/public/main-images').then(body => {
-      const raw = body?.mainImages ?? body?.images ?? body ?? {};
-      const entries = Array.isArray(raw) ? raw.map(m => [m?.compartmentId, m]) : Object.entries(raw);
-      const next = {};
-      for (const [cid, m] of entries) { const main = toMain(m, cid); if (main && cid) next[cid] = main; }
+      const next = Object.fromEntries(Object.entries(body.mainImages).map(([cid, m]) => [cid, toMain(m, cid)]));
       publish(next);
       return next;
     }).catch(() => { mainPromise = null; return mainCache; });
@@ -67,8 +55,7 @@ export async function loadGallery(compId, { editor = false, force = false } = {}
   const key = `${editor ? 'e' : 'p'}:${compId}`;
   if (!force && galleryCache.has(key)) return galleryCache.get(key);
   const body = await api(editor ? `/compartments/${compId}/gallery` : `/public/compartments/${compId}/gallery`);
-  const raw = body?.items ?? body?.assets ?? [];
-  const value = { main: toMain(body?.main, compId), items: (Array.isArray(raw) ? raw : []).map(toItem).filter(Boolean) };
+  const value = { main: toMain(body.main, compId), items: body.items.map(toItem) };
   galleryCache.set(key, value);
   return value;
 }
@@ -90,7 +77,7 @@ export async function setMainImage(compId, { kind, ref, expectRevision = 0 }) {
   const body = await api(`/compartments/${compId}/main-image`, { method: 'POST', json: { kind, ref, expectRevision } });
   invalidateGallery(compId);
   await loadMainImages({ force: true });
-  return toMain(body?.main ?? body, compId);
+  return toMain(body.main, compId);
 }
 
 /** Delete an uploaded photo (soft delete on the server). */

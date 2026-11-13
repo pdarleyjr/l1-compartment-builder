@@ -51,7 +51,7 @@ async function loadMounts(db, compId) {
  * Validate a job request against the compartment and build everything createJob/estimate/retry need.
  * @param {*} db
  * @param {string} compId
- * @param {object} req normalized request ({kind, mode, preset, instructions, parentVersionId, markupAssetId, assetId})
+ * @param {object} req normalized request ({kind, mode, preset, instructions, parentVersionId, markupAssetId, assetId, referenceAssetIds?})
  * @param {object} settings values for PLAN_SETTING_KEYS
  */
 export async function planJob(db, compId, req, settings) {
@@ -63,6 +63,7 @@ export async function planJob(db, compId, req, settings) {
   const request = {
     kind: req.kind, mode: req.mode ?? null, preset: req.preset ?? null, instructions: req.instructions ?? null,
     parentVersionId: req.parentVersionId ?? null, markupAssetId: req.markupAssetId ?? null, assetId: req.assetId ?? null,
+    referenceAssetIds: req.referenceAssetIds ?? [],
   };
   if (req.kind === 'recognize') return planRecognize(db, compId, request, settings, doc, loaded.revision, fingerprint);
   if (req.kind !== 'render') throw new HttpError('INVALID_REQUEST', 'Unsupported job kind.');
@@ -86,6 +87,9 @@ export async function planJob(db, compId, req, settings) {
     throw new HttpError('INVALID_REQUEST', 'A parent version or markup layer is only allowed in edit mode.');
   }
 
+  for (const refId of request.referenceAssetIds) {
+    await loadAssetFor(db, refId, compId, 'A reference photo', USER_PHOTO_CATEGORIES.split(',').map(c => c.replace(/'/g, '')));
+  }
   const { results } = await db.prepare(
     `SELECT * FROM assets WHERE compartment_id = ? AND status = 'committed' AND category IN (${USER_PHOTO_CATEGORIES}) ORDER BY created_at, id`,
   ).bind(compId).all();
@@ -98,7 +102,7 @@ export async function planJob(db, compId, req, settings) {
 
   const spec = await buildSceneSpec({
     compId, doc, design: designObj, assets, links: assets.flatMap(a => a.links || []), mounts, settings,
-    mode, preset: presetName, instructions: req.instructions ?? null, parentVersion,
+    mode, preset: presetName, instructions: req.instructions ?? null, parentVersion, referenceAssetIds: request.referenceAssetIds,
     markupAsset: markupAsset ? { id: markupAsset.id } : null,
   });
   const prompt = buildPrompt(spec);

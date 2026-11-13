@@ -49,7 +49,7 @@ async function createJobCore({ db, actor, now }, { compId, req, key, confirmEsti
   if (existing) return replay(existing, compId);
   const plan = await planJob(db, compId, req, settings);
   if (plan.presetCfg?.confirm && !(Number.isFinite(confirmEstimateUsd) && confirmEstimateUsd >= plan.estimate.usd)) {
-    throw new HttpError('CONFLICT', `This preset needs confirmation: estimated cost ${money(plan.estimate.usd)}.`, { estimate: plan.estimate });
+    throw new HttpError('CONFLICT', `This preset needs confirmation: estimated cost ${money(plan.estimate.usd)}.`, { estimate: plan.estimate, requiresConfirm: true });
   }
   const id = newId(ID_PREFIX.job);
   const caps = {
@@ -92,7 +92,7 @@ export async function estimate({ request, db, params }) {
   const settings = await loadPlanSettings(db);
   assertEnabled(settings, false);
   const plan = await planJob(db, compId, req, settings);
-  return json({ estimate: plan.estimate, model: plan.model, size: plan.size, confirmRequired: !!plan.presetCfg?.confirm });
+  return json({ estimate: plan.estimate, model: plan.model, size: plan.size, requiresConfirm: !!plan.presetCfg?.confirm });
 }
 
 /** POST /api/compartments/:compId/jobs */

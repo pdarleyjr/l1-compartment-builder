@@ -1,3 +1,4 @@
+// Gallery item = {id (== ref: preset path | asset id | version id), kind, url, thumbUrl, title, provenance, status?, ...}.
 // Public/editor galleries and the server-authoritative main image per compartment (architecture §9).
 import { COMPARTMENTS } from '../../shared/apparatus.js';
 import { COMPARTMENT_IDS, MAIN_IMAGE_KINDS } from '../../shared/contracts.js';
@@ -10,12 +11,12 @@ const presetsOf = compId => COMPARTMENTS.find(c => c.id === compId)?.images ?? [
 const presetProvenance = img => (/render/i.test(img.src) || /render/i.test(img.title || '') ? 'ai_concept' : 'user_photo');
 
 function presetItem(compId, img) {
-  return { id: `preset:${img.src}`, kind: 'preset', ref: img.src, compartmentId: compId, title: img.title ?? null, url: img.src, thumbUrl: img.src, provenance: presetProvenance(img) };
+  return { id: img.src, kind: 'preset', ref: img.src, compartmentId: compId, title: img.title ?? null, url: img.src, thumbUrl: img.src, provenance: presetProvenance(img) };
 }
 
 function assetItem(r, pub) {
   return {
-    id: `asset:${r.id}`, kind: 'asset', ref: r.id, assetId: r.id, compartmentId: r.compartment_id, title: r.title ?? null,
+    id: r.id, kind: 'asset', ref: r.id, assetId: r.id, compartmentId: r.compartment_id, title: r.title ?? null,
     category: r.category, visibility: r.visibility, url: assetUrl(r.id, 'display', pub), thumbUrl: assetUrl(r.id, 'thumb', pub),
     provenance: r.provenance, createdAt: r.created_at,
   };
@@ -53,7 +54,7 @@ async function mainFor(db, compId, doc) {
   return row ? toMainImage(db, row, await currentFingerprint(doc, compId)) : null;
 }
 
-/** GET /api/public/main-images → {[compId]: MainImage} (only compartments with an explicit main image). */
+/** GET /api/public/main-images → {mainImages: {[compId]: MainImage}} (only compartments with a main_images row). */
 export async function getMainImages({ db }) {
   const loaded = await loadPlannerDoc(db);
   const { results } = await db.prepare('SELECT * FROM main_images').all();
@@ -63,7 +64,7 @@ export async function getMainImages({ db }) {
     const m = await toMainImage(db, row, await currentFingerprint(loaded?.doc, row.compartment_id));
     if (m) out[row.compartment_id] = m;
   }
-  return json(out);
+  return json({ mainImages: out });
 }
 
 /** GET /api/public/compartments/:compId/gallery */
@@ -102,7 +103,7 @@ export async function getEditorGallery({ db, params }) {
       ...(assets || []).map(r => assetItem(r, r.visibility === 'public')),
       ...(publicRenders || []).map(r => assetItem(r, true)),
       ...(versions || []).map(v => ({
-        id: `version:${v.id}`, kind: 'version', ref: v.id, versionId: v.id, assetId: v.asset_id, compartmentId: compId, status: v.status,
+        id: v.id, kind: 'version', ref: v.id, versionId: v.id, assetId: v.asset_id, compartmentId: compId, status: v.status,
         title: 'AI concept', url: assetUrl(v.asset_id, 'display'), thumbUrl: assetUrl(v.asset_id, 'thumb'), provenance: 'ai_concept',
         stale: !!fp && v.inventory_fingerprint !== fp, createdAt: v.created_at,
       })),

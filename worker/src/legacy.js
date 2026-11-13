@@ -68,8 +68,17 @@ async function readImages(env) {
   const featuredImages = {};
   const mains = await env.DB.prepare('SELECT compartment_id, kind, ref FROM main_images').all();
   for (const m of mains.results ?? []) {
-    if (m.kind === 'preset') featuredImages[m.compartment_id] = { kind: 'preset', src: m.ref };
-    else if (m.kind === 'asset' && uidByAsset.has(m.ref)) featuredImages[m.compartment_id] = { kind: 'uploaded', uid: uidByAsset.get(m.ref) };
+    if (m.kind === 'preset') { featuredImages[m.compartment_id] = { kind: 'preset', src: m.ref }; continue; }
+    if (m.kind === 'asset' && uidByAsset.has(m.ref)) { featuredImages[m.compartment_id] = { kind: 'uploaded', uid: uidByAsset.get(m.ref) }; continue; }
+    // Studio images (a user photo or an approved AI version) have no legacy uid: project them as an uploaded image whose
+    // uid is the asset id, so an old open tab still shows the current main image.
+    const assetId = m.kind === 'version'
+      ? (await env.DB.prepare("SELECT asset_id FROM image_versions WHERE id = ? AND status != 'deleted'").bind(m.ref).first())?.asset_id
+      : m.ref;
+    const a = assetId && await env.DB.prepare("SELECT id, title FROM assets WHERE id = ? AND status = 'committed' AND visibility = 'public' AND deleted_at IS NULL").bind(assetId).first();
+    if (!a) continue;
+    (uploadedImages[m.compartment_id] ??= []).push({ uid: a.id, title: a.title ?? undefined, dataUrl: `${base}/api/public/assets/${a.id}/display` });
+    featuredImages[m.compartment_id] = { kind: 'uploaded', uid: a.id };
   }
   return JSON.stringify({ uploadedImages, featuredImages });
 }

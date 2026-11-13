@@ -141,7 +141,7 @@ export const ROUTES = Object.freeze([
   { method: 'POST', path: '/planner/ops', auth: 'editor', handler: 'planner.postOps' },
   // gallery / main image (E2)
   { method: 'GET', path: '/public/compartments/:compId/gallery', auth: 'public', handler: 'gallery.getPublicGallery' },
-  { method: 'GET', path: '/public/main-images', auth: 'public', handler: 'gallery.getMainImages' },
+  { method: 'GET', path: '/public/main-images', auth: 'public', handler: 'gallery.getMainImages' }, // → {mainImages:{[compId]:MainImage}}
   { method: 'GET', path: '/public/assets/:assetId/:variant', auth: 'public', handler: 'assets.getPublicVariant' },
   { method: 'GET', path: '/compartments/:compId/gallery', auth: 'editor', handler: 'gallery.getEditorGallery' },
   { method: 'POST', path: '/compartments/:compId/main-image', auth: 'editor', handler: 'gallery.setMainImage' },
@@ -211,19 +211,62 @@ export const ROUTES = Object.freeze([
  *   variants:{display:string, thumb:string, original:string}, verification:object|null }} ImageVersion
  * @typedef {{ compartmentId:string, revision:number, kind:'preset'|'asset'|'version', ref:string, url:string,
  *   thumbUrl:string|null, provenance:string, stale:boolean, previous:{kind:string, ref:string}|null }} MainImage
+ * @typedef {{ targetType:'assignment'|'equipment'|'mount', targetId:string, zone:string, orientation?:'vertical'|'horizontal'|'angled', notes?:string }} Placement
+ * @typedef {{ placements:Placement[], notes?:string }} Layout
+ * @typedef {{ targetType:'equipment'|'assignment'|'asset', targetId:string }} MountLink
+ * @typedef {{ assetId:string, url:string, role:string, label:string|null, sheet:string|null }} ClaimReference
  *
+ * Canonical API payloads (enforced end to end by tests/integration/**; the architecture doc's "API payloads" appendix is the prose form).
+ * ── planner ──
+ * GET  /api/public/planner[?since=rev]  → 200 {revision, migrated:boolean, doc} | 304 (ETag "<rev>"). doc = projectV1 + equipmentIds + assignmentIds;
+ *                            before migration {revision:0, migrated:false, doc:<legacy KV document>|null}
+ * POST /api/planner/ops      body {baseRevision, clientOpId, ops:Op[]} → 200 {revision, doc, applied:number[], conflicts:[{index, reason, current}], deduped?}
+ * ── gallery / main image ──
+ * GET  /api/public/main-images → {mainImages:{[compId]:MainImage}}   (only compartments that have a main_images row)
+ * GET  /api/(public/)compartments/:id/gallery → {compartmentId, main:MainImage|null, items:[{id, kind:'preset'|'asset'|'version', url, thumbUrl,
+ *                            title, provenance, status?}]}  (id == the ref accepted by POST main-image: preset path | asset id | version id)
+ * POST /api/compartments/:id/main-image         body {kind, ref, expectRevision, acknowledgeStale?} → {main:MainImage} | 409 STALE_SOURCE {details:{current, version}}
+ * POST /api/compartments/:id/main-image/restore body {expectRevision} → {main:MainImage}
+ * ── assets / links ──
  * POST /api/assets           body {compartmentId, category, title?, notes?, width, height, bytes, sha256, idempotencyKey}
  *                            → 201 {asset, upload:{original:url, display:url, thumb:url}}
- * PUT  /api/assets/:id/:v    raw bytes, Content-Type image/* → 204
+ * PUT  /api/assets/:id/:v    raw bytes, Content-Type image/* → 204 (markup assets may use PNG for every variant)
  * POST /api/assets/:id/commit body {links?:[{targetType,targetId,quantity?,region?}], plannerOps?:Op[], baseRevision?}
- *                            → 200 {asset, plannerRevision?, conflicts?}   (all-or-nothing in one D1 batch)
- * POST /api/planner/ops      body {baseRevision, clientOpId, ops:Op[]} → 200 {revision, doc, applied:number[], conflicts:[{index, reason, current}]}
- * POST /api/compartments/:id/jobs  header Idempotency-Key; body {kind:'render'|'recognize', mode?, preset?, instructions?,
- *                            parentVersionId?, markupAssetId?, assetId? (recognize), confirmEstimateUsd?}
- *                            → 202 {job, estimate:{usd, basis}}  | 402 BUDGET_EXCEEDED | 429 CONCURRENCY_LIMIT | 503 AI_DISABLED
- * POST /api/processor/claim  body {node, kinds} → 200 {job, spec, references:[{assetId, variant, role, label, url}], leaseExpiresAt} | 204
- * POST /api/processor/jobs/:id/heartbeat body {node, status} → 200 {leaseExpiresAt, cancelRequested} | 409 LEASE_LOST
- * PUT  /api/processor/jobs/:id/output/:variant raw bytes → 204
- * POST /api/processor/jobs/:id/complete body {node, usage, actualCostUsd, providerRequestId?, revisedPrompt?, result?, width?, height?}
- * POST /api/processor/jobs/:id/fail body {node, code, message, retryable:boolean, providerCalled:boolean}
+ *                            → 200 {asset, plannerRevision?}  | 409 CONFLICT {details:{conflicts, plannerRevision}} (all-or-nothing in one D1 batch)
+ * POST /api/assets/:id/links body {links, plannerOps?, baseRevision?} → {asset, links, plannerRevision?}
+ * PATCH /api/assets/:id      body {title?, notes?, category?, expectRevision} → {asset}
+ * PATCH /api/links/:id       body {state:'confirmed'|'rejected', quantity?, region?} → {link}
+ * GET  /api/compartments/:id/assets[?category=] → {assets:[Asset]}  every Asset carries `links` (confirmed + suggested, with state)
+ * ── mounts / designs ──
+ * mount payload              {name, manufacturer?, model?, description?, dimensions?, orientation?, zone?, capacity?, classification, status,
+ *                            equipmentId?, notes?, links:[{targetType:'equipment'|'assignment'|'asset', targetId}]}; PATCH adds expectRevision
+ * GET  /api/compartments/:id/mounts → {mounts:[Mount]} | POST → 201 {mount} | PATCH /api/mounts/:id → {mount}  (Mount = payload + id, compartmentId, revision, links)
+ * layout                     {placements:[{targetType:'assignment'|'equipment'|'mount', targetId, zone, orientation?, notes?}], notes?}
+ * GET  /api/compartments/:id/design → {design:{compartmentId, revision, layout}}; PUT body {layout, expectRevision} → {design}
+ * ── jobs / versions ──
+ * POST /api/compartments/:id/estimate body = job request → {estimate:{usd, basis}, requiresConfirm, model, size}
+ * POST /api/compartments/:id/jobs  header Idempotency-Key; body {kind:'render'|'recognize', mode?, preset?, instructions?, parentVersionId?,
+ *                            markupAssetId?, assetId? (recognize), referenceAssetIds? (render, ≤ 4 committed assets of the compartment),
+ *                            confirmEstimateUsd?} → 202 {job, estimate:{usd, basis}} | 402 BUDGET_EXCEEDED | 429 CONCURRENCY_LIMIT | 503 AI_DISABLED
+ *                            | 409 CONFLICT {details:{estimate:{usd, basis}, requiresConfirm:true}} when the preset needs confirmEstimateUsd >= estimate
+ * GET  /api/compartments/:id/jobs → {jobs:[Job]}; GET /api/jobs/:id → {job, version|null}; POST .../cancel|retry → {job} | 202 {job, estimate}
+ * GET  /api/compartments/:id/versions → {versions:[ImageVersion]}; PATCH /api/versions/:id body {status:'rejected'|'deleted'} → {version}
+ * GET  /api/usage → {today, month, user:{spent, reserved, cap}, jobs:{active, max, userActive, userMax}, recent:[ledger row]}
+ * ── processor (service identity; raw endpoints identify the node with header X-L1-Node) ──
+ * POST /api/processor/claim  body {node, kinds} → 200 ClaimPayload | 204
+ *   ClaimPayload = {job:{id, kind, mode, model, quality, complexity, size, outputFormat, prompt, attempts, moderation:'auto'}, spec,
+ *     references:[{assetId, url, role:'compartment'|'parent'|'markup'|'tool'|'mount'|'arrangement'|'other'|'subject', label, sheet:string|null}],
+ *     maxReferences, leaseExpiresAt}. Contact-sheet items are flattened into `references` with `sheet` = the sheet label (null = send directly).
+ *     recognize/verify: the photo is the one reference (role 'subject') and spec.candidates = [{equipmentId, name}] (effective inventory).
+ * POST /api/processor/jobs/:id/heartbeat body {node, status} → 200 {leaseExpiresAt, cancelRequested, status} | 409 LEASE_LOST
+ * GET  /api/processor/assets/:assetId/:variant?job=<id> (X-L1-Node) → bytes;  PUT /api/processor/jobs/:id/output/:variant (X-L1-Node) raw bytes → 204
+ * POST /api/processor/jobs/:id/complete body {node, usage, actualCostUsd?, providerRequestId?, revisedPrompt?, result?, width?, height?}
+ *                            usage is the provider's snake_case usage object verbatim (Images API {input_tokens, output_tokens,
+ *                            input_tokens_details:{text_tokens, image_tokens, cached_tokens?}}); the server prices it with shared/cost.js actualCost
+ * POST /api/processor/jobs/:id/fail body {node, code, message, retryable:boolean, providerCalled:boolean}; code 'CANCELLED' → status 'cancelled'
+ *                            (ledger released when !providerCalled)
+ * ── admin ──
+ * GET  /api/admin/settings → {settings:{[key]:{value, revision, default, updatedBy, updatedAt}}}; PUT /api/admin/settings/:key body {value, expectRevision}
+ *                            → {key, value, revision}; GET .../:key/history → {key, history:[{revision, value, updatedBy, updatedAt}]}
+ * GET  /api/admin/audit → {entries:[{id, at, actor, action, entityType, entityId, detail}]}
  */

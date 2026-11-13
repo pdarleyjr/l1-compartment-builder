@@ -51,11 +51,11 @@ function ToolsStep({ data, onLink }) {
 
 /**
  * AI Compartment Studio: full-screen on phones, large sheet on tablets+. Lazy-loaded by App.jsx.
- * @param {{compId:string, session:object, plannerDoc:object, plannerRevision:number, mainImage:object|null, onClose:()=>void, onMainImageChanged:(m:object)=>void}} props
+ * @param {{compId:string, session:object, plannerDoc:object, plannerRevision:number, mainImage:object|null, initialStep?:'photos'|'tools'|'mounts'|'arrange'|'generate'|'review'|'publish', onClose:()=>void, onMainImageChanged:(m:object)=>void}} props
  */
-export default function StudioShell({ compId, session, plannerDoc, mainImage, onClose, onMainImageChanged }) {
+export default function StudioShell({ compId, session, plannerDoc, plannerRevision = 0, mainImage, initialStep = 'photos', onClose, onMainImageChanged }) {
   const [view, setView] = useState('steps');
-  const [step, setStep] = useState('photos');
+  const [step, setStep] = useState(STEPS.some(s => s.id === initialStep) ? initialStep : 'photos');
   const [reviewMode, setReviewMode] = useState('review');
   const [selectedId, setSelectedId] = useState(null);
   const [baseId, setBaseId] = useState(null);
@@ -93,10 +93,10 @@ export default function StudioShell({ compId, session, plannerDoc, mainImage, on
   else if (view === 'admin') body = <AdminPanel session={session} />;
   else {
     const stepBody = {
-      photos: <div className="p-3 sm:p-4 space-y-4"><CapturePanel compId={compId} session={session} plannerDoc={plannerDoc} onAssetsCommitted={data.refresh} />
-        <AssetLibrary compId={compId} session={session} plannerDoc={plannerDoc} /></div>,
+      photos: <div className="p-3 sm:p-4 space-y-4"><CapturePanel compId={compId} session={session} plannerDoc={plannerDoc} plannerRevision={plannerRevision} onAssetsCommitted={data.refresh} />
+        <AssetLibrary compId={compId} session={session} plannerDoc={plannerDoc} plannerRevision={plannerRevision} /></div>,
       tools: <ToolsStep data={data} onLink={() => setLinkPicker(true)} />,
-      mounts: <div className="p-3 sm:p-4"><MountsPanel compId={compId} session={session} plannerDoc={plannerDoc} /></div>,
+      mounts: <div className="p-3 sm:p-4"><MountsPanel compId={compId} session={session} plannerDoc={plannerDoc} plannerRevision={plannerRevision} /></div>,
       arrange: <ArrangeStep compId={compId} tools={data.tools} mounts={data.mounts} geometry={data.geometry} />,
       generate: <GenerateStep compId={compId} session={session} data={data} jobsState={jobsState} onOpenResult={openResult} onGotoStep={go} />,
       review: reviewMode === 'edit'
@@ -127,9 +127,9 @@ export default function StudioShell({ compId, session, plannerDoc, mainImage, on
         {body}
       </Dialog>
       <Dialog open={linkPicker} title="Choose a photo to link" variant="sheet" zIndex="z-[55]" onClose={() => setLinkPicker(false)}>
-        <AssetLibrary compId={compId} session={session} plannerDoc={plannerDoc} selectable onSelect={a => { setLinkPicker(false); setLinkAsset(a); }} />
+        <AssetLibrary compId={compId} session={session} plannerDoc={plannerDoc} plannerRevision={plannerRevision} selectable onSelect={a => { setLinkPicker(false); setLinkAsset(a); }} />
       </Dialog>
-      {linkAsset && <AssociationDialog compId={compId} asset={linkAsset} plannerDoc={plannerDoc} open onClose={() => setLinkAsset(null)} onSaved={() => { setLinkAsset(null); data.refresh(); }} />}
+      {linkAsset && <AssociationDialog compId={compId} asset={linkAsset} plannerDoc={plannerDoc} plannerRevision={plannerRevision} open onClose={() => setLinkAsset(null)} onSaved={() => { setLinkAsset(null); data.refresh(); }} />}
     </ToastProvider>
   );
 }

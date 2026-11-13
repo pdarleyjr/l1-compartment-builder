@@ -17,10 +17,10 @@ import { usePendingPhotos } from './usePendingPhotos.js';
 /**
  * Photo capture and upload: Take Photo, Choose Photos, optional live camera, drag-and-drop, review (rotate / crop /
  * retake / remove / category) and a durable upload queue. Tool photos open the association dialog after commit.
- * @param {{compId:string, session:{status:string, canEdit?:boolean}, plannerDoc:object|null, onAssetsCommitted?:(assets:object[])=>void,
+ * @param {{compId:string, session:{status:string, canEdit?:boolean}, plannerDoc:object|null, plannerRevision?:number, onAssetsCommitted?:(assets:object[])=>void,
  *   defaultCategory?:string}} props
  */
-export function CapturePanel({ compId, session, plannerDoc, onAssetsCommitted, defaultCategory = 'tool' }) {
+export function CapturePanel({ compId, session, plannerDoc, plannerRevision, onAssetsCommitted, defaultCategory = 'tool' }) {
   const pending = usePendingPhotos(defaultCategory);
   const [category, setCategory] = useState(defaultCategory);
   const [camera, setCamera] = useState(false);
@@ -144,7 +144,7 @@ export function CapturePanel({ compId, session, plannerDoc, onAssetsCommitted, d
           loadPreview={r => pending.loadEditorPreview(cropItem.file, r)}
           onApply={t => { pending.applyTransform(cropItem.id, cropItem.file, t); setCrop(null); }} onClose={() => setCrop(null)} />
       )}
-      <AssociationDialog compId={compId} session={session} asset={assocQueue[0] ?? null} plannerDoc={plannerDoc} open={assocQueue.length > 0}
+      <AssociationDialog compId={compId} session={session} asset={assocQueue[0] ?? null} plannerDoc={plannerDoc} plannerRevision={plannerRevision} open={assocQueue.length > 0}
         onClose={() => setAssocQueue(q => q.slice(1))}
         onSaved={asset => { notifyAssetsChanged(compId); committedRef.current?.([asset]); setAssocQueue(q => q.slice(1)); }} />
     </section>
