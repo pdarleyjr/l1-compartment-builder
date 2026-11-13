@@ -1,3 +1,4 @@
+/* global AbortSignal, Blob, Buffer, FormData, fetch -- Node 22 runtime globals (AIW processor runs on Node, not in the browser/Worker) */
 // Provider-neutral image adapter. The runner only depends on generateImage / recognize / verify, so models or
 // providers can change without touching job-runner.js. Never log the key, auth headers, prompts > 200 chars or bytes.
 import { sanitize } from './logger.js';

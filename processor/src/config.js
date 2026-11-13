@@ -1,3 +1,4 @@
+/* global URL, process -- Node 22 runtime globals (AIW processor runs on Node, not in the browser/Worker) */
 // Environment configuration. Values are never printed; only variable names appear in errors.
 import os from 'node:os';
 import { JOB_KINDS } from '../../shared/contracts.js';

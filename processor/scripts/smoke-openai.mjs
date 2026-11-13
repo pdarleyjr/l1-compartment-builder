@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+/* global console, process -- Node 22 runtime globals (AIW processor runs on Node, not in the browser/Worker) */
 // MANUAL, owner-run live smoke test. Costs real money (one 1024x1024 `low` flare image, roughly a cent or less).
 // Usage: L1_OPENAI_API_KEY=... node scripts/smoke-openai.mjs --i-understand-this-costs-money
 // Prefer: sudo -u l1img env "$(sudo cat /etc/l1-image-processor/env | grep ^L1_OPENAI_API_KEY)" ... (never paste the key in argv).

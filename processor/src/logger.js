@@ -1,3 +1,4 @@
+/* global Buffer, process -- Node 22 runtime globals (AIW processor runs on Node, not in the browser/Worker) */
 // Structured JSON logger with redaction. Never emits secrets, auth headers, long prompts or image data.
 
 const SECRET_KEY_RE = /authorization|secret|api[-_]?key|token|password|cookie/i;

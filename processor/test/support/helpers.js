@@ -1,3 +1,4 @@
+/* global Buffer, URL -- Node 22 runtime globals (AIW processor runs on Node, not in the browser/Worker) */
 // Mock Worker + OpenAI servers (node:http) and a tiny multipart parser.
 import http from 'node:http';
 import sharp from 'sharp';

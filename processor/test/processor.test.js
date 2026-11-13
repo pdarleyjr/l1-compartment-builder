@@ -1,3 +1,4 @@
+/* global Buffer, clearTimeout, setTimeout -- Node 22 runtime globals (AIW processor runs on Node, not in the browser/Worker) */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import sharp from 'sharp';

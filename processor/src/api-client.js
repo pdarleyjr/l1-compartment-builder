@@ -1,3 +1,4 @@
+/* global AbortSignal, Buffer, URL, fetch, setTimeout -- Node 22 runtime globals (AIW processor runs on Node, not in the browser/Worker) */
 // Client for the Worker's /api/processor/* endpoints (Cloudflare Access service token auth).
 import { Readable } from 'node:stream';
 

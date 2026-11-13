@@ -1,3 +1,4 @@
+/* global AbortController, clearInterval, setInterval -- Node 22 runtime globals (AIW processor runs on Node, not in the browser/Worker) */
 // State machine for one claimed job. The server is the source of truth for leases, retries and cost; this module
 // only reports status, calls the provider at most once, and uploads the result. A paid call is never resubmitted here.
 import { JOB_TIMING } from '../../shared/contracts.js';

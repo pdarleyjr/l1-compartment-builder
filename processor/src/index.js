@@ -1,3 +1,4 @@
+/* global AbortController, clearTimeout, process, setTimeout -- Node 22 runtime globals (AIW processor runs on Node, not in the browser/Worker) */
 // Main loop: claim → run → repeat. Outbound only; no listening port.
 import { pathToFileURL } from 'node:url';
 import { JOB_TIMING } from '../../shared/contracts.js';

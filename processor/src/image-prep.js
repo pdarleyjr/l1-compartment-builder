@@ -1,3 +1,4 @@
+/* global Buffer -- Node 22 runtime globals (AIW processor runs on Node, not in the browser/Worker) */
 // sharp-based image preparation: reference normalisation, contact sheets, output derivatives.
 import sharp from 'sharp';
 import { ASSET_LIMITS } from '../../shared/contracts.js';
