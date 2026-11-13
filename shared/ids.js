@@ -1,0 +1,4 @@
+// Owner: part C. Interface stub (P0). Ids: ${prefix}_ + 26 chars [0-9a-z], time-sortable (shared/contracts.js ID_PREFIX).
+/** @param {string} prefix @returns {string} */ export function newId(prefix) { throw new Error('NOT_IMPLEMENTED: interface stub, owner replaces it'); }
+/** sha256 hex of a string or bytes (Web Crypto; works in Worker, browser, Node 22). @returns {Promise<string>} */ export async function sha256Hex(input) { throw new Error('NOT_IMPLEMENTED: interface stub, owner replaces it'); }
+/** Deterministic equipment id for a base-inventory name: 'eq_' + first 16 hex of sha256(name). @returns {Promise<string>} */ export async function equipmentIdForName(name) { throw new Error('NOT_IMPLEMENTED: interface stub, owner replaces it'); }
