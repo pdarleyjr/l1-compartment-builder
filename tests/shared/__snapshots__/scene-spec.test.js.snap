@@ -1,0 +1,37 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`buildPrompt > snapshot: section order, numbered tools with quantities, mounts flagged, fixed obstructions, realism 1`] = `
+"Photorealistic planning visualization of Ladder 1 compartment RS3. Mode: reference.
+
+1. COMPARTMENT STRUCTURE AND PROPORTIONS
+Compartment: RS3. Right Side 3 (RS3): Wide horizontal compartment, right side. Fixed tray: 15" D × 56" W × 16" H total interior height. Very wide and shallow. Note: tires located directly below this compartment.
+Interior dimensions: width 56 in, height 16 in, depth 15 in.
+Frame the image as a landscape view of the open compartment (output size 2560x864); keep the compartment's real proportions.
+
+2. EXACT TOOL LIST (every item below must appear, in exactly these quantities)
+1. 5 in LDH Hose 100 ft Sections (PF-50Y-100) × 2 — large yellow 5 inch LDH supply hose section, large roll or accordion fold with Storz couplings — approx. size 46 × 46 × 8 in (rolled/stowed)
+2. Holmatro V-Strut × 4 — blue and silver telescoping vehicle stabilization strut, heavy-duty extrication support strut with adjustable length and rubber foot pad — approx. size 42.5 × 5.9 × 8.3 in
+Total: 2 distinct items, 6 units. Do not add equipment that is not listed.
+
+3. SOURCE-PHOTO FIDELITY
+Reference photographs of the actual equipment are supplied (some may be labelled contact sheets). Reproduce the exact shape, colour, markings and scale of:
+- #1 5 in LDH Hose 100 ft Sections (PF-50Y-100)
+- #2 Holmatro V-Strut
+Tools without a photograph follow their text description.
+The compartment photograph defines the real interior; match its shelves, walls and fixtures.
+
+4. MOUNTS AND HARDWARE (planning concept, not verified)
+- Strut bracket — two-point strut holder — size 12 x 4 in — zone left_wall — vertical orientation — status: proposed; planning concept, not verified
+
+5. PLACEMENT AND ORIENTATION
+- upper_shelf: #2 Holmatro V-Strut (vertical) [bundle: V-Struts]
+- No fixed zone (arrange sensibly, heavy items low, long tools vertical or along the walls): #1 5 in LDH Hose 100 ft Sections (PF-50Y-100)
+Available zones: middle_shelf, left_wall, right_wall, rear_wall, floor, door_area, other.
+
+6. FIXED OBSTRUCTIONS
+Keep these fixed features of the compartment: Fixed Tray; Tires below compartment; Shallow.
+
+7. PHOTOGRAPHIC REALISM
+Natural light.
+Label no items with text overlays; show each listed tool exactly the stated number of times."
+`;

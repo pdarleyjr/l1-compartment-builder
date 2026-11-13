@@ -1,15 +1,34 @@
-/* eslint-disable no-unused-vars -- P0 interface stub; remove when implemented */
-// Owner: part C. Interface stub (P0). Planner doc v2 + op engine (docs/architecture/ai-compartment-studio.md §4).
-// v1 view = {allocations, customQtys, customTools, bundles, removedItems, customDimensions}; v2 = v1 + {schema:2, equipmentIds, assignmentIds}.
-/** @returns {object} empty v2 doc with all COMPARTMENT_IDS × SLOTS_PER_COMPARTMENT empty slots */ export function emptyDocV2() { throw new Error('NOT_IMPLEMENTED: interface stub, owner replaces it'); }
-/** v1 (legacy KV document) → v2; never renames or drops data. @returns {Promise<{doc:object, report:object}>} */ export async function migrateV1toV2(v1) { throw new Error('NOT_IMPLEMENTED: interface stub, owner replaces it'); }
-/** v2 → v1 view (what App.jsx state and the legacy GET /state use). */ export function projectV1(doc) { throw new Error('NOT_IMPLEMENTED: interface stub, owner replaces it'); }
-/** Effective inventory rows: [{name, qty, dims, custom, equipmentId, assigned, free}] */ export function effectiveInventory(doc) { throw new Error('NOT_IMPLEMENTED: interface stub, owner replaces it'); }
-/** Per-name assigned counts across all compartments. @returns {Record<string,number>} */ export function assignedCounts(doc) { throw new Error('NOT_IMPLEMENTED: interface stub, owner replaces it'); }
-/** Rows for one compartment: [{slotIndex, name, equipmentId, assignmentId, bundleId}] (occupied slots only). */ export function compartmentAssignments(doc, compId) { throw new Error('NOT_IMPLEMENTED: interface stub, owner replaces it'); }
-/** Diff two v1 views (or v2 docs) into ops; opts.renames = [{from,to}] emits renameEquipment instead of remove+add. @returns {object[]} */ export function diffDocs(base, next, opts = {}) { throw new Error('NOT_IMPLEMENTED: interface stub, owner replaces it'); }
-/** Validate one op shape. @returns {{ok:boolean, error?:string}} */ export function validateOp(op) { throw new Error('NOT_IMPLEMENTED: interface stub, owner replaces it'); }
-/** Apply ops with preconditions + invariants. ctx = {newId, now}. Pure (no I/O).
- * @returns {{doc:object, applied:number[], conflicts:{index:number, reason:'PRECONDITION'|'QUANTITY'|'NOT_FOUND'|'INVALID', current?:unknown}[]}} */
-export function applyOps(doc, ops, ctx) { throw new Error('NOT_IMPLEMENTED: interface stub, owner replaces it'); }
-/** Repair invariants (slot/assignmentIds parity, bundle pruning). @returns {{doc:object, repairs:string[]}} */ export function normalizeDoc(doc, ctx) { throw new Error('NOT_IMPLEMENTED: interface stub, owner replaces it'); }
+// Planner doc v2 + op engine (docs/architecture/ai-compartment-studio.md §4). Pure ESM, no I/O.
+// v1 view = {allocations, customQtys, customTools, bundles, removedItems, customDimensions};
+// v2 = v1 + {schema:2, equipmentIds:{name→'eq_…'}, assignmentIds:{compId→('as_…'|null)[]}}.
+// Ops are plain objects discriminated by `op` (one of contracts PLANNER_OPS), e.g.
+//   {op:'setSlot', comp, index, value, expect}, {op:'setSlotCount', comp, count, expect}, {op:'setCustomQty', name, qty|null},
+//   {op:'upsertCustomTool', tool:{name, qty, dimensions?, description?, equipmentId?}}, {op:'removeCustomTool', name},
+//   {op:'setDimension', name, value|null}, {op:'setRemoved', name, removed}, {op:'upsertBundle', comp, bundle},
+//   {op:'deleteBundle', comp, id}, {op:'renameEquipment', from, to}.
+import { assignedCounts, effectiveInventory, emptyDocV2, equipmentIdOf, normalizeDoc } from './lib/doc.js';
+import { diffDocs } from './lib/diff.js';
+import { migrateV1toV2, projectV1 } from './lib/migrate.js';
+import { applyOps, validateOp } from './lib/ops.js';
+
+export { applyOps, assignedCounts, diffDocs, effectiveInventory, emptyDocV2, migrateV1toV2, normalizeDoc, projectV1, validateOp };
+
+/**
+ * Rows for one compartment: [{slotIndex, name, equipmentId, assignmentId, bundleId}] (occupied slots only).
+ * bundleId follows App.jsx slotBundleMap (the last bundle listing a slot wins); null when unbundled.
+ * @param {object} doc @param {string} compId
+ */
+export function compartmentAssignments(doc, compId) {
+  const slots = doc.allocations?.[compId] ?? [];
+  const bundleOf = {};
+  for (const b of doc.bundles?.[compId] ?? []) for (const i of b.slotIndices) bundleOf[i] = b.id;
+  const rows = [];
+  slots.forEach((name, slotIndex) => {
+    if (!name) return;
+    rows.push({
+      slotIndex, name, equipmentId: equipmentIdOf(doc, name),
+      assignmentId: doc.assignmentIds?.[compId]?.[slotIndex] ?? null, bundleId: bundleOf[slotIndex] ?? null,
+    });
+  });
+  return rows;
+}
