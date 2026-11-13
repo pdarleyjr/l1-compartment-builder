@@ -1,10 +1,10 @@
-// Owner: part B1. Interface stub (P0). Imported by src/studio/StudioShell.jsx (B2).
+// Studio capture / library / mounts entry (part B1). Imported lazily by src/studio/StudioShell.jsx (part B2).
 // Props contract:
 //  CapturePanel      {compId, session, plannerDoc, onAssetsCommitted(assets[]), defaultCategory?}
 //  AssetLibrary      {compId, session, plannerDoc, onSelect?(asset), selectable?:boolean, filterCategory?}
-//  AssociationDialog {compId, asset, plannerDoc, open, onClose, onSaved(asset)}
+//  AssociationDialog {compId, asset, plannerDoc, open, onClose, onSaved(asset)}  (+ optional session)
 //  MountsPanel       {compId, session, plannerDoc}
-export function CapturePanel() { return null; }
-export function AssetLibrary() { return null; }
-export function AssociationDialog() { return null; }
-export function MountsPanel() { return null; }
+export { CapturePanel } from './CapturePanel.jsx';
+export { AssetLibrary } from '../library/AssetLibrary.jsx';
+export { AssociationDialog } from '../library/AssociationDialog.jsx';
+export { MountsPanel } from '../mounts/MountsPanel.jsx';
