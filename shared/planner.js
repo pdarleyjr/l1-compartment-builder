@@ -1,3 +1,4 @@
+/* eslint-disable no-unused-vars -- P0 interface stub; remove when implemented */
 // Owner: part C. Interface stub (P0). Planner doc v2 + op engine (docs/architecture/ai-compartment-studio.md §4).
 // v1 view = {allocations, customQtys, customTools, bundles, removedItems, customDimensions}; v2 = v1 + {schema:2, equipmentIds, assignmentIds}.
 /** @returns {object} empty v2 doc with all COMPARTMENT_IDS × SLOTS_PER_COMPARTMENT empty slots */ export function emptyDocV2() { throw new Error('NOT_IMPLEMENTED: interface stub, owner replaces it'); }

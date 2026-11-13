@@ -1,3 +1,4 @@
+/* eslint-disable no-unused-vars -- P0 interface stub; remove when implemented */
 // Owner: part C. Interface stub (P0). Versioned scene spec (schema 'l1.scene/1') + deterministic prompt.
 /** input = {compId, doc, design, assets, links, mounts, settings, mode, preset, instructions, parentVersion, markupAsset}
  * → spec {schema, compartment, equipment:[...], mounts:[...], references:[...], render:{...}, inventoryFingerprint, plannerRevision, designRevision} */

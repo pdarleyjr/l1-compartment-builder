@@ -1,3 +1,4 @@
+/* eslint-disable no-unused-vars -- P0 interface stub; remove when implemented */
 // Owner: part C. Interface stub (P0). Photo ↔ inventory association rules (architecture §7).
 /** Search candidates for linking: {assigned:[...], available:[...], unavailable:[...]} each row {name, equipmentId, assignedHere, free, assignmentIds}. */
 export function searchCandidates(doc, compId, query) { throw new Error('NOT_IMPLEMENTED: interface stub, owner replaces it'); }

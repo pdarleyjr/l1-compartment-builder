@@ -1,3 +1,4 @@
+/* eslint-disable no-unused-vars -- P0 interface stub; remove when implemented */
 // Owner: part C. Interface stub (P0).
 /** @returns {{usd:number, basis:string}} */ export function estimateCost({ model, quality, size, referenceCount, promptChars }, pricing) { throw new Error('NOT_IMPLEMENTED: interface stub, owner replaces it'); }
 /** @returns {number} USD from provider usage */ export function actualCost(usage, model, pricing) { throw new Error('NOT_IMPLEMENTED: interface stub, owner replaces it'); }
