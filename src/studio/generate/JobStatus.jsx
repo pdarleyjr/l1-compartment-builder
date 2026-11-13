@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { Loader2, RotateCw, XCircle } from 'lucide-react';
 import { cancelJob, isActiveJob, jobStatusText, retryJob } from '../../lib/jobs.js';
 import { StatusPill } from '../common/badges.jsx';
-import { humanError, costLabel } from '../common/format.js';
+import ConfirmDialog from '../common/ConfirmDialog.jsx';
+import { humanError, costLabel, estimateLabel, isConfirmEstimate } from '../common/format.js';
 
 /** Live status of one job with cancel/retry. @param {{job:object, onChanged?:()=>void, onOpenResult?:(job:object)=>void}} props */
 export default function JobStatus({ job, onChanged, onOpenResult }) {
@@ -16,7 +17,17 @@ export default function JobStatus({ job, onChanged, onOpenResult }) {
     const h = setInterval(() => setElapsed(Math.max(0, Math.round((Date.now() - start.current) / 1000))), 1000);
     return () => clearInterval(h);
   }, [active]);
-  const run = async fn => { setBusy(true); setErr(''); try { await fn(); onChanged?.(); } catch (e) { setErr(humanError(e)); } finally { setBusy(false); } };
+  // A Maximum Detail retry needs the same cost confirmation as the Generate step: the server answers the plain retry
+  // with the confirm-estimate 409, and we ask the person before resending with the confirmed estimate.
+  const [confirm, setConfirm] = useState(null);
+  const run = async fn => {
+    setBusy(true); setErr('');
+    try { await fn(); setConfirm(null); onChanged?.(); } catch (e) {
+      if (isConfirmEstimate(e)) setConfirm({ usd: e.details?.estimate?.usd ?? null });
+      else { setConfirm(null); setErr(humanError(e)); }
+    } finally { setBusy(false); }
+  };
+  const retry = confirmUsd => run(() => retryJob(job.id, confirmUsd));
   return (
     <div data-testid="job-status" data-status={job.status} className="rounded-lg border border-slate-300 bg-white p-3 space-y-2" role="status" aria-live="polite">
       <div className="flex flex-wrap items-center gap-2">
@@ -30,9 +41,12 @@ export default function JobStatus({ job, onChanged, onOpenResult }) {
       {err && <p role="alert" className="text-sm text-red-700">{err}</p>}
       <div className="flex flex-wrap gap-2">
         {active && <button type="button" disabled={busy} onClick={() => run(() => cancelJob(job.id))} className="touch-target px-3 rounded border border-slate-300 text-sm font-semibold flex items-center gap-1 hover:bg-slate-100"><XCircle size={14} /> Cancel</button>}
-        {job.status === 'failed' && <button type="button" disabled={busy} onClick={() => run(() => retryJob(job.id))} className="touch-target px-3 rounded bg-slate-800 text-white text-sm font-semibold flex items-center gap-1"><RotateCw size={14} /> Try again</button>}
+        {job.status === 'failed' && <button type="button" disabled={busy} onClick={() => retry()} className="touch-target px-3 rounded bg-slate-800 text-white text-sm font-semibold flex items-center gap-1"><RotateCw size={14} /> Try again</button>}
         {job.status === 'completed' && job.resultVersionId && onOpenResult && <button type="button" onClick={() => onOpenResult(job)} className="touch-target px-3 rounded bg-red-700 text-white text-sm font-bold">Review result</button>}
       </div>
+      <ConfirmDialog open={!!confirm} title="Confirm cost" confirmLabel="Try again" testId="retry-confirm"
+        message={<p>Trying again will cost {confirm?.usd != null ? <b>{estimateLabel(confirm.usd)}</b> : 'more than a normal preview'}. The final cost is shown on the image once it is done.</p>}
+        onConfirm={() => { if (!busy && confirm?.usd != null) retry(confirm.usd); }} onCancel={() => setConfirm(null)} />
     </div>
   );
 }

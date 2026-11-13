@@ -8,6 +8,7 @@ import { cancelJob, createJob, estimate, getJob, listJobs, listVersions, retryJo
 import { fetchSession } from '../../src/lib/session.js';
 import { normalizeHistory, normalizeSettings } from '../../src/studio/admin/settingsModel.js';
 import { photoCounts } from '../../src/studio/common/data.js';
+import { isConfirmEstimate } from '../../src/studio/common/format.js';
 import { uploadMarkup } from '../../src/studio/edit/markupUpload.js';
 import { classifySubmitError, usageMeters } from '../../src/studio/generate/generateModel.js';
 import { extractMain } from '../../src/studio/publish/publishModel.js';
@@ -83,6 +84,16 @@ describe('UI client modules against the real Worker', () => {
     try { await createJob('LS3', { ...body, preset: 'max' }, 'ui-key-0000002'); } catch (e) { err = e; }
     expect(err).toMatchObject({ status: 409, code: 'CONFLICT', details: { requiresConfirm: true } });
     expect(classifySubmitError(err)).toMatchObject({ kind: 'confirm', estimateUsd: expect.any(Number) });
+    // retrying a Maximum Detail job needs the same confirmation (JobStatus "Try again" → "Confirm cost")
+    const maxJob = await createJob('LS3', { ...body, preset: 'max', confirmEstimateUsd: err.details.estimate.usd }, 'ui-key-0000004');
+    await cancelJob(maxJob.job.id);
+    let retryErr;
+    try { await retryJob(maxJob.job.id); } catch (e) { retryErr = e; }
+    expect(isConfirmEstimate(retryErr)).toBe(true);
+    const confirmedRetry = await retryJob(maxJob.job.id, retryErr.details.estimate.usd);
+    expect(confirmedRetry.job).toMatchObject({ status: 'queued', preset: 'max' });
+    expect(confirmedRetry.job.id).not.toBe(maxJob.job.id);
+    await cancelJob(confirmedRetry.job.id);
     // referenceAssetIds from the edit step are accepted
     const { assetId } = await uploadPhoto(device(stack, EDITOR), { compartmentId: 'LS3', category: 'other', title: 'Reference' });
     const withRef = await createJob('LS3', { ...body, referenceAssetIds: [assetId] }, 'ui-key-0000003');

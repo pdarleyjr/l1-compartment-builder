@@ -32,9 +32,14 @@ export async function listJobs(compId, signal) {
 export async function cancelJob(jobId) {
   return (await api(`/jobs/${enc(jobId)}/cancel`, { method: 'POST', json: {} })).job;
 }
-/** Explicit retry; reserves budget again, so it gets its own idempotency key. @param {string} jobId */
-export async function retryJob(jobId) {
-  return api(`/jobs/${enc(jobId)}/retry`, { method: 'POST', json: {}, idempotencyKey: newKey('retry') });
+/**
+ * Explicit retry; reserves budget again, so it gets its own idempotency key. A preset that needs cost confirmation
+ * (Maximum Detail) is refused with the confirm-estimate 409 until the caller passes the confirmed estimate.
+ * @param {string} jobId @param {number} [confirmEstimateUsd]
+ */
+export async function retryJob(jobId, confirmEstimateUsd) {
+  const json = Number.isFinite(confirmEstimateUsd) ? { confirmEstimateUsd } : {};
+  return api(`/jobs/${enc(jobId)}/retry`, { method: 'POST', json, idempotencyKey: newKey('retry') });
 }
 /**
  * Cost estimate for a render request (POST estimate → {estimate:{usd, basis}, requiresConfirm}).

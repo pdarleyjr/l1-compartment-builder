@@ -154,8 +154,8 @@ The paid-call line is `provider_called_at`. The server records it before the pro
 Recovery runs when processors claim work and in the 5 minute scheduled cleanup.
 
 **Retry or cancel (the requester or an admin):** open Generate or Edit, find the job card, tap **Try again**
-(failed jobs) or **Cancel** (active jobs). Retry makes a new job with a new reservation. A Maximum Detail job needs cost confirmation, so
-start it again from the Generate step instead of **Try again**. A queued job cancels at once. A running job is asked to stop and does so only before the paid call.
+(failed jobs) or **Cancel** (active jobs). Retry makes a new job with a new reservation. Retrying a Maximum Detail job
+first opens **Confirm cost** with the estimate, the same as the Generate step. A queued job cancels at once. A running job is asked to stop and does so only before the paid call.
 For `OUTCOME_UNKNOWN`, check the OpenAI usage page first, then retry only if you still need the image.
 
 **Processor checks** (on aiw-k8 and aiw-7070):
