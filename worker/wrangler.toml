@@ -12,7 +12,7 @@ routes = [
 ENVIRONMENT = "production"
 AUTH_MODE = "access"
 ACCESS_TEAM_DOMAIN = "https://darl.cloudflareaccess.com"
-ACCESS_AUD = "SET_AT_DEPLOY"            # Access application AUD tag; the Worker fails closed while unset
+ACCESS_AUD = "d7c35bcccde6f80d2b74ea6b2da2faf444b89a71c6b5b0f41e7e8400590ae426"   # Access app "L1 Compartment Builder API" (l1.mbfdhub.com/api)
 PUBLIC_ORIGIN = "https://l1.mbfdhub.com"
 OWNER_EMAILS = "pdarleyjr@gmail.com"    # seeds settings 'access.admins' on first migration only
 
