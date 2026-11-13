@@ -10,6 +10,7 @@ import InventoryPanel from './components/InventoryPanel.jsx';
 import OverviewPanel from './components/OverviewPanel.jsx';
 import Sidebar, { NavDrawer } from './components/Sidebar.jsx';
 import SyncStatusPill from './components/SyncStatusPill.jsx';
+import MigrationAction from './components/MigrationAction.jsx';
 import exportExcel from './components/exportExcel.js';
 import usePlan from './components/usePlan.js';
 import usePlanActions from './components/usePlanActions.js';
@@ -94,7 +95,7 @@ export default function App() {
           activeTab={activeTab} onNav={nav} onClose={closeSidebar} counts={counts}
           totalPlaced={plan.totalPlaced} totalReq={plan.totalReq}
           sync={{ status: sync.status, pending: sync.pending }} session={session}
-          canEdit={!readOnly} onReset={handleReset}
+          canEdit={!readOnly} onReset={handleReset} onSignIn={signIn}
         />
       </NavDrawer>
 
@@ -108,7 +109,7 @@ export default function App() {
               <p className="text-[10px] text-slate-400">Compartment Builder</p>
             </div>
           </div>
-          <SyncStatusPill status={sync.status} pending={sync.pending} className="ml-auto" />
+          <SyncStatusPill status={sync.status} pending={sync.pending} className="ml-auto" onSignIn={signIn} />
           <button onClick={() => setSidebarOpen(true)} data-touch-target="true"
             className="touch-target text-white p-2 rounded-md hover:bg-slate-700 active:bg-slate-600 transition-colors touch-manipulation"
             aria-label="Open navigation menu">
@@ -117,7 +118,9 @@ export default function App() {
         </div>
 
         {sync.migrated === false && (
-          <Banner tone="amber"><span>The shared plan is being moved to the new service. It is read-only until that finishes.</span></Banner>
+          <Banner tone="amber" action={<MigrationAction session={session} signIn={signIn} />}>
+            <span>The shared plan is being moved to the new service. It is read-only until that finishes.</span>
+          </Banner>
         )}
         {sync.migrated !== false && session.status === 'signed_out' && (
           <Banner action={

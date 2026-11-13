@@ -92,7 +92,7 @@ function CompBtn({ comp, active, count, onClick }) {
  *   totalPlaced:number, totalReq:number, sync:{status:string, pending:number}, session:{status:string, email:string|null},
  *   canEdit:boolean, onReset:()=>void}} props
  */
-export default function Sidebar({ activeTab, onNav, onClose, counts, totalPlaced, totalReq, sync, session, canEdit, onReset }) {
+export default function Sidebar({ activeTab, onNav, onClose, counts, totalPlaced, totalReq, sync, session, canEdit, onReset, onSignIn }) {
   return (
     <div id="sidebar" className="w-64 bg-slate-900 text-slate-300 flex flex-col h-full overflow-y-auto shrink-0 print:hidden">
       <div className="p-4 bg-slate-950 flex items-center gap-3 shrink-0">
@@ -145,7 +145,7 @@ export default function Sidebar({ activeTab, onNav, onClose, counts, totalPlaced
             style={{ width: `${Math.min(100, (totalPlaced / Math.max(1, totalReq)) * 100)}%` }} />
         </div>
 
-        <SyncStatusPill status={sync.status} pending={sync.pending} />
+        <SyncStatusPill status={sync.status} pending={sync.pending} onSignIn={onSignIn} />
         {session.status === 'signed_in' && (
           <div className="flex items-center justify-between gap-2 text-[11px] text-slate-400">
             <span className="truncate" title={session.email}>{session.email}</span>
