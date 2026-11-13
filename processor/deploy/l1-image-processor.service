@@ -1,0 +1,33 @@
+[Unit]
+Description=MBFD Ladder 1 AI Compartment Studio image processor
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=l1img
+Group=l1img
+WorkingDirectory=/opt/l1-image-processor/processor
+EnvironmentFile=/etc/l1-image-processor/env
+ExecStart=/usr/bin/node src/index.js
+Restart=always
+RestartSec=10
+TimeoutStopSec=150
+KillSignal=SIGTERM
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=yes
+LockPersonality=yes
+MemoryMax=1G
+CPUQuota=200%
+
+[Install]
+WantedBy=multi-user.target
