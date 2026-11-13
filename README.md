@@ -1,17 +1,23 @@
 # L1 Compartment Builder
 
 Production planning application for the MBFD Ladder 1 mid-mount apparatus. The
-application is deployed at `https://l1.mbfdhub.com/`; shared state, uploaded
-images, and AI rendering requests are handled by the `l1-state-sync`
-Cloudflare Worker.
+application is deployed at `https://l1.mbfdhub.com/`. Everything the browser
+needs is same-origin under `/api` (Cloudflare Worker `l1-state-sync`, route
+`l1.mbfdhub.com/api/*`); see `docs/architecture/ai-compartment-studio.md`.
 
 ## Capabilities
 
 - Eleven editable apparatus compartments and four apparatus overview screens
 - Searchable equipment assignment with inventory quantity enforcement
 - Bulk assignment, row expansion, equipment bundles, and full inventory CRUD
-- Shared state synchronization through Cloudflare KV
-- Uploaded/featured compartment images and Cloudflare Workers AI renderings
+- Revisioned, op-based planner sync (`src/lib/planner-sync.js`): edits are queued
+  durably on the device, sent with retry/backoff, and merged by the server, so two
+  people editing different compartments never overwrite each other. A status pill
+  reports Saved · Saving… · Offline — changes queued · Sign in to save · Sync problem.
+- Anonymous visitors can read everything; editing needs sign-in (Cloudflare Access).
+- Server-backed gallery and one approved main image per compartment, shown first on
+  every device (`src/lib/gallery.js`); photos and AI renderings are created in the
+  lazily loaded **AI Compartment Studio** (`src/studio/`)
 - Two-sheet Excel export and print/PDF layouts
 - Responsive navigation and touch-first controls for phones, tablets, and
   desktop browsers
@@ -25,8 +31,16 @@ npm ci
 npm run dev
 ```
 
-The application accepts local Worker CORS requests from
-`http://127.0.0.1:4173` and `http://localhost:4173`.
+The browser talks to `/api` on its own origin. To develop against a local Worker
+(for example `wrangler dev`), set `L1_API_PROXY=http://127.0.0.1:8787` before
+`npm run dev`; Vite then proxies `/api` to it. Without it the planner loads
+read-only from whatever `/api` answers (tests use an in-memory fake instead).
+
+API shapes the UI relies on (beyond `shared/contracts.js`): `GET /api/public/planner`
+→ `{revision, doc, migrated}` (`?since=<rev>` → 304 when unchanged; `migrated:false`
+makes the planner read-only with a notice); `GET /api/public/main-images` →
+`{mainImages: {compId: MainImage}}`; gallery endpoints → `{main, items:[{id, kind,
+url, thumbUrl, title, provenance}]}`.
 
 ## Verification
 
@@ -38,11 +52,18 @@ npm run build
 npm run test:e2e
 ```
 
-The end-to-end suite uses isolated, intercepted Worker state so it cannot alter
-the production apparatus plan. It covers Chromium at desktop, iPad-sized, and
-phone-sized viewports, including keyboard and touch dropdown flows, route and
-image health, inventory mutations, upload/AI carousel flows, Excel export,
-44-pixel interactive targets, horizontal overflow, and automated WCAG checks.
+The end-to-end suite serves every `/api` request from an in-memory implementation
+of the API contract (`e2e/helpers/fake-api.js`: session with a signed-in/out switch,
+revisioned planner ops, galleries, main images, asset variants), so it cannot alter
+any real data. It covers Chromium at desktop, iPad-sized, and phone-sized viewports,
+including keyboard and touch dropdown flows, read-only mode, two-device concurrent
+edits, offline queue persistence, rename consistency, carousel main image and stale
+badge, Studio lazy loading and the error boundary, route and image health,
+inventory mutations, Excel export, 44-pixel interactive targets, horizontal
+overflow, and automated WCAG checks. The fake API in `e2e/helpers/fake-api.js` runs the
+real `shared/planner.js`. On workers where the default Chromium cannot start, the config falls
+back to the cached `chromium_headless_shell` (or set `L1_CHROMIUM_PATH`); run with
+`npx playwright test --trace off`.
 
 ## Manual Cloudflare release
 

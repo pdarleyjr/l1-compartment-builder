@@ -9,3 +9,10 @@ Thumbs.db
 test-results/
 playwright-report/
 coverage/
+
+# Local secrets / env files (security review 2026-11)
+.dev.vars
+.env
+.env.*
+processor/deploy/*.env
+.wrangler/

@@ -1,0 +1,16 @@
+{
+  "name": "l1-image-processor",
+  "version": "1.0.0",
+  "private": true,
+  "description": "AIW image-job processor for the MBFD Ladder 1 AI Compartment Studio",
+  "type": "module",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "start": "node src/index.js",
+    "health": "node src/index.js --health",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "sharp": "^0.34.0"
+  }
+}
