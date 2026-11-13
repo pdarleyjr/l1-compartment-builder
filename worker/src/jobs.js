@@ -161,7 +161,7 @@ export async function retryJob(ctx) {
   if (!original) throw new HttpError('CONFLICT', 'This job cannot be retried; start a new request instead.');
   const body = request.headers.get('Content-Length') === '0' || !request.body ? {} : await readJson(request).catch(() => ({}));
   const out = await createJobCore(ctx, {
-    compId: row.compartment_id, req: original, key: request.headers.get('Idempotency-Key') || `retry:${row.id}`,
+    compId: row.compartment_id, req: original, key: request.headers.get('Idempotency-Key') ? idempotencyKey(request) : `retry:${row.id}`,
     confirmEstimateUsd: body.confirmEstimateUsd, auditAction: 'job.retry', auditDetail: { retryOf: row.id },
   });
   return json({ job: out.job, estimate: out.estimate }, 202);

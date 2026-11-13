@@ -7,6 +7,7 @@ export const SECURITY_HEADERS = Object.freeze({
   'X-Frame-Options': 'DENY',
   'Cache-Control': 'no-store',
   'Content-Security-Policy': "default-src 'none'; frame-ancestors 'none'",
+  'Strict-Transport-Security': 'max-age=31536000; includeSubDomains',
 });
 
 /** Error carrying a contract error code (shared/contracts.js ERROR_CODES); the router turns it into a JSON response. */

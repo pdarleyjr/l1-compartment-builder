@@ -18,6 +18,22 @@ export const PLAN_SETTING_KEYS = [
 ];
 const USER_PHOTO_CATEGORIES = "'compartment','tool','tool_group','mount','arrangement','other'";
 
+/** Collapse control characters (newlines, tabs, NEL, LS/PS) so user-authored text stays on one line of the prompt. */
+// eslint-disable-next-line no-control-regex
+export const flatText = v => (typeof v === 'string' ? v.replace(/[\u0000-\u001f\u007f-\u009f\u2028\u2029]+/g, ' ').replace(/ {2,}/g, ' ').trim() : v);
+
+/**
+ * Equipment/tool/mount names, descriptions and photo titles are operator-authored and are interpolated into the prompt as
+ * list items. Without this a name such as "Axe\n\n8. NEW RULES: ..." would add a fake prompt section. Free-form operator
+ * instructions are different: they live inside the quoted OPERATOR INSTRUCTIONS block built by shared/lib/prompt.js.
+ */
+export function neutralizeSpecText(spec) {
+  for (const e of spec.equipment ?? []) for (const k of ['name', 'visual', 'dims', 'zone', 'orientation', 'bundle']) e[k] = flatText(e[k]);
+  for (const m of spec.mounts ?? []) for (const k of ['name', 'description', 'dimensions', 'zone', 'orientation']) m[k] = flatText(m[k]);
+  for (const r of spec.references ?? []) r.label = flatText(r.label);
+  return spec;
+}
+
 /** Gate on the Studio/AI switches. `needAi=false` is used by estimates. */
 export function assertEnabled(settings, needAi) {
   if (settings['studio.enabled'] === false) throw new HttpError('STUDIO_DISABLED', 'The Studio is turned off right now.');
@@ -100,11 +116,11 @@ export async function planJob(db, compId, req, settings) {
   const design = await db.prepare('SELECT * FROM designs WHERE compartment_id = ?').bind(compId).first();
   const designObj = design ? { revision: design.revision, layout: parseJson(design.layout, {}) } : { revision: 0, layout: { zones: compartmentGeometry(compId, overrides[compId] || {}).zones, placements: [] } };
 
-  const spec = await buildSceneSpec({
+  const spec = neutralizeSpecText(await buildSceneSpec({
     compId, doc, design: designObj, assets, links: assets.flatMap(a => a.links || []), mounts, settings,
     mode, preset: presetName, instructions: req.instructions ?? null, parentVersion, referenceAssetIds: request.referenceAssetIds,
     markupAsset: markupAsset ? { id: markupAsset.id } : null,
-  });
+  }));
   const prompt = buildPrompt(spec);
   const size = renderSizeFor(compId, overrides[compId] || {});
   const maxRefs = settings['references.maxPerRequest'] ?? 10;
@@ -131,11 +147,11 @@ async function planRecognize(db, compId, request, settings, doc, plannerRevision
   if (!request.assetId) throw new HttpError('INVALID_REQUEST', 'Choose the photo to recognize.');
   const asset = await loadAssetFor(db, request.assetId, compId, 'That photo', ['compartment', 'tool', 'tool_group', 'mount', 'arrangement', 'other']);
   const model = settings['recognition.model'];
-  const registry = Object.entries(doc.equipmentIds || {}).map(([name, equipmentId]) => ({ equipmentId, name }));
-  const here = compartmentAssignments(doc, compId).map(a => ({ equipmentId: a.equipmentId, name: a.name }));
+  const registry = Object.entries(doc.equipmentIds || {}).map(([name, equipmentId]) => ({ equipmentId, name: flatText(name) }));
+  const here = compartmentAssignments(doc, compId).map(a => ({ equipmentId: a.equipmentId, name: flatText(a.name) }));
   const spec = {
     schema: SCENE_SPEC_SCHEMA, kind: 'recognize', compartmentId: compId, subjectAssetId: asset.id, assignedHere: here, candidates: registry,
-    references: [{ assetId: asset.id, role: 'subject', label: asset.title || asset.category }], inventoryFingerprint: fingerprint, plannerRevision, request,
+    references: [{ assetId: asset.id, role: 'subject', label: flatText(asset.title || asset.category) }], inventoryFingerprint: fingerprint, plannerRevision, request,
   };
   const prompt = [
     'Identify the pieces of fire-service equipment visible in this photo of an apparatus compartment.',

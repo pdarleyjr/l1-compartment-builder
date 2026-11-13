@@ -71,3 +71,18 @@ export function sniffImage(bytes) {
   if (!type || !dims || !(dims.width > 0) || !(dims.height > 0)) return null;
   return { type, ext: EXT_BY_TYPE[type], width: dims.width, height: dims.height };
 }
+
+/** Decode-bomb guard: a few header bytes can declare 65535x65535 pixels. Limits are per edge and in total pixels. */
+export const PIXEL_LIMITS = Object.freeze({
+  upload: Object.freeze({ maxEdge: 4096, maxPixels: 4096 * 4096 }),
+  output: Object.freeze({ maxEdge: 8192, maxPixels: 36_000_000 }),
+});
+
+/** @param {{width:number,height:number}} dims @param {'upload'|'output'} [kind] @returns {boolean} true when within limits */
+export function withinPixelLimits(dims, kind = 'upload') {
+  const lim = PIXEL_LIMITS[kind];
+  return dims.width <= lim.maxEdge && dims.height <= lim.maxEdge && dims.width * dims.height <= lim.maxPixels;
+}
+
+/** Content types the Worker will ever emit for stored image bytes. */
+export const SERVABLE_TYPES = Object.freeze(new Set(Object.values(TYPE_BY_EXT)));

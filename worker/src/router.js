@@ -80,6 +80,12 @@ export async function handleApi(request, env, executionCtx) {
     if (MUTATING.has(request.method) && origin !== null && origin !== env.PUBLIC_ORIGIN) {
       throw new HttpError('FORBIDDEN', 'Cross-origin requests are not allowed.');
     }
+    // Fetch Metadata: a browser marks cross-site requests itself. Mutations that carry no Origin but are flagged cross-site
+    // (or any ambient-cookie request from another site) are refused; non-browser clients (curl, the processor) send neither.
+    const site = request.headers.get('Sec-Fetch-Site');
+    if (MUTATING.has(request.method) && origin === null && (site === 'cross-site' || site === 'same-site')) {
+      throw new HttpError('FORBIDDEN', 'Cross-origin requests are not allowed.');
+    }
 
     const actor = await getActor(request, env);
     authorize(route, actor);

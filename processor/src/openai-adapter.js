@@ -13,6 +13,7 @@ export class ProviderError extends Error {
     this.providerCalled = f.providerCalled;
     this.status = f.status ?? 0;
     this.requestId = f.requestId ?? null;
+    this.detail = f.detail ?? null; // sanitized provider text for the local log only; never sent to the Worker
   }
 }
 
@@ -30,11 +31,13 @@ const PRE_SEND_CODES = new Set(['ENOTFOUND', 'EAI_AGAIN', 'ECONNREFUSED', 'ENETU
 export function mapHttpError(status, body, requestId = null) {
   const e = body?.error || {};
   const pcode = String(e.code || e.type || '');
-  const raw = typeof e.message === 'string' ? e.message : `Provider returned HTTP ${status}`;
-  const message = sanitize(raw).slice(0, 300);
-  const base = { providerCalled: true, status, requestId, message };
+  // The provider's error text is never forwarded (it can carry key fragments, org ids or prompt excerpts): the message is a
+  // fixed string built from the status only, and the Worker maps the code to user-facing text. Details stay in the
+  // sanitized processor log through the thrown error's `detail`.
+  const message = `Provider returned HTTP ${status}`;
+  const base = { providerCalled: true, status, requestId, message, detail: sanitize(typeof e.message === 'string' ? e.message : '').slice(0, 300) };
   if (pcode === 'moderation_blocked') return new ProviderError({ ...base, code: 'MODERATION_BLOCKED', retryable: false,
-    message: `The image provider declined this request (safety moderation). Change the instructions or photos and try again. ${message}`.slice(0, 400) });
+    message: 'The image provider declined this request (safety moderation). Change the instructions or photos and try again.' });
   if (pcode === 'insufficient_quota' || pcode === 'billing_hard_limit_reached' || /billing|quota/i.test(pcode)) return new ProviderError({ ...base, code: 'PROVIDER_BILLING', retryable: false });
   if (status === 429) return new ProviderError({ ...base, code: 'PROVIDER_RATE_LIMITED', retryable: true });
   if (status >= 500) return new ProviderError({ ...base, code: 'PROVIDER_UNAVAILABLE', retryable: true });

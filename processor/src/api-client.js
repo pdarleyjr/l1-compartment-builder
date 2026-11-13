@@ -43,6 +43,14 @@ export function createApiClient(cfg, opts = {}) {
     return u.toString();
   };
   const apiUrl = path => resolveUrl(`${cfg.apiBase}/api${path}`);
+  /** Downloads are limited to the processor asset endpoints of this Worker: a claim can never point the service token at another API route. */
+  const assetUrlOf = pathOrUrl => {
+    const resolved = resolveUrl(pathOrUrl);
+    if (!new URL(resolved).pathname.startsWith(`${new URL(cfg.apiBase).pathname.replace(/\/+$/, '')}/api/processor/assets/`)) {
+      throw new ApiError(0, 'BAD_URL', 'Refusing to download from a non-asset endpoint');
+    }
+    return resolved;
+  };
 
   /** Run fn with retries on network errors and 5xx (never on 4xx). */
   async function withRetry(fn, signal) {
@@ -80,7 +88,7 @@ export function createApiClient(cfg, opts = {}) {
     return withRetry(async () => {
       const signal = o.signal ? AbortSignal.any([o.signal, AbortSignal.timeout(timeoutMs)]) : AbortSignal.timeout(timeoutMs);
       const res = await fetchImpl(apiUrl(path), {
-        method, signal,
+        method, signal, redirect: 'error', // a redirect would re-send the Access secret headers to wherever it points
         headers: { ...authHeaders(), accept: 'application/json', ...(body === undefined ? {} : { 'content-type': 'application/json' }) },
         body: body === undefined ? undefined : JSON.stringify(body),
       });
@@ -114,7 +122,7 @@ export function createApiClient(cfg, opts = {}) {
         const chunks = [];
         for (let i = 0; i < bytes.length; i += 64 * 1024) chunks.push(bytes.subarray(i, i + 64 * 1024));
         const res = await fetchImpl(apiUrl(`/processor/jobs/${encodeURIComponent(jobId)}/output/${variant}`), {
-          method: 'PUT', signal, duplex: 'half',
+          method: 'PUT', signal, duplex: 'half', redirect: 'error',
           headers: { ...authHeaders(), 'content-type': mime, 'content-length': String(bytes.length) },
           body: Readable.toWeb(Readable.from(chunks)),
         });
@@ -130,7 +138,7 @@ export function createApiClient(cfg, opts = {}) {
     async download(url, o = {}) {
       return withRetry(async () => {
         const signal = o.signal ? AbortSignal.any([o.signal, AbortSignal.timeout(uploadTimeoutMs)]) : AbortSignal.timeout(uploadTimeoutMs);
-        const res = await fetchImpl(resolveUrl(url), { method: 'GET', headers: authHeaders(), signal });
+        const res = await fetchImpl(assetUrlOf(url), { method: 'GET', redirect: 'error', headers: authHeaders(), signal });
         if (!res.ok) throw await toError(res);
         const declared = Number(res.headers.get('content-length') || 0);
         if (declared > maxDownloadBytes) throw new ApiError(413, 'TOO_LARGE', 'Reference exceeds the download size cap');

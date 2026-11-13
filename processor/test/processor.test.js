@@ -287,7 +287,7 @@ test('api client: retries 5xx and network errors, never 4xx; refuses cross-origi
   n = 0; assert.deepEqual(await api.heartbeat('five', 'n', 'preparing').catch(e => e), { ok: 1 }); assert.equal(n, 3);
   n = 0; await assert.rejects(api.fail('four', {}), e => e.code === 'INVALID_REQUEST'); assert.equal(n, 1);
   await assert.rejects(api.download('http://elsewhere.example/x'), e => e.code === 'BAD_URL');
-  await assert.rejects(api.download('/big'), e => e.code === 'TOO_LARGE');
+  await assert.rejects(api.download('/api/processor/assets/big/original?job=j'), e => e.code === 'TOO_LARGE');
   await srv.close();
 });
 

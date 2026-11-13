@@ -4,13 +4,14 @@ import { newId, sha256Hex } from '../../shared/ids.js';
 import { validateAssetCreate, validateAssetUpdate, validateLinks } from '../../shared/validation.js';
 import { HttpError, SECURITY_HEADERS, actorLabel, errorResponse, json, readBytes, readJson } from './http.js';
 import { auditStatement } from './audit.js';
-import { sniffImage, TYPE_BY_EXT } from './media.js';
+import { sniffImage, SERVABLE_TYPES, TYPE_BY_EXT, withinPixelLimits } from './media.js';
 import {
   assetDto, assetUrl, auditIfChanged, changes, linksFor, ownerOrAdmin, parseJson, requireCompartment, requireVariant, validated,
 } from './studio/common.js';
 import { linkInsertStatements, resolveLinks, resolvePlannerContext } from './studio/link-logic.js';
 
 const MAX_BY_VARIANT = { original: ASSET_LIMITS.originalMaxBytes, display: ASSET_LIMITS.displayMaxBytes, thumb: ASSET_LIMITS.thumbMaxBytes };
+const PIXEL_EDGE = ASSET_LIMITS.originalMaxEdge;
 const KEY_COL = { original: 'original_key', display: 'display_key', thumb: 'thumb_key' };
 
 /** R2 object key for one variant. */
@@ -78,6 +79,9 @@ export async function putVariant({ request, env, db, actor, params, now }) {
     throw new HttpError('UNSUPPORTED_MEDIA', variant === 'original'
       ? 'Only JPEG, PNG or WebP images can be uploaded (convert HEIC photos first).'
       : 'Display and thumbnail images must be WebP or JPEG.');
+  }
+  if (!withinPixelLimits(sniff, 'upload')) {
+    throw new HttpError('PAYLOAD_TOO_LARGE', `Images may be at most ${PIXEL_EDGE} pixels on the longest side. Resize the photo and try again.`);
   }
   if (variant === 'original' && asset.sha256 && (await sha256Hex(bytes)) !== asset.sha256) {
     throw new HttpError('INVALID_REQUEST', 'The upload does not match its checksum. Please retry the upload.');
@@ -179,8 +183,16 @@ async function serve(env, asset, variant, headers) {
   if (!key) throw new HttpError('NOT_FOUND', 'Image not available.');
   const obj = await env.ASSETS.get(key);
   if (!obj) throw new HttpError('NOT_FOUND', 'Image not available.');
-  const type = obj.httpMetadata?.contentType || TYPE_BY_EXT[key.split('.').pop()] || 'application/octet-stream';
-  return new Response(obj.body, { status: 200, headers: { ...SECURITY_HEADERS, 'Content-Type': type, ...headers } });
+  const stored = obj.httpMetadata?.contentType || TYPE_BY_EXT[key.split('.').pop()];
+  const type = SERVABLE_TYPES.has(stored) ? stored : 'application/octet-stream';
+  // Stored bytes are magic-byte verified images; these headers make a mislabelled object inert in a browser anyway.
+  return new Response(obj.body, {
+    status: 200,
+    headers: {
+      ...SECURITY_HEADERS, 'Content-Security-Policy': "default-src 'none'; frame-ancestors 'none'; sandbox",
+      'Content-Type': type, 'Content-Disposition': 'inline; filename="image"', ...headers,
+    },
+  });
 }
 
 /** GET /api/assets/:assetId/:variant (editors; private, never cached) */
@@ -194,6 +206,8 @@ export async function getVariant({ env, db, params }) {
 /** GET /api/public/assets/:assetId/:variant — only public + committed assets, immutable caching. */
 export async function getPublicVariant({ request, env, db, params }) {
   const variant = requireVariant(params.variant);
+  // Originals are full-size camera files (EXIF/GPS, 25 MB); the public site only ever needs display/thumb.
+  if (variant === 'original') return errorResponse('NOT_FOUND', 'Image not found.');
   const asset = await db.prepare("SELECT * FROM assets WHERE id = ? AND status = 'committed' AND visibility = 'public'").bind(params.assetId).first();
   if (!asset) return errorResponse('NOT_FOUND', 'Image not found.');
   const etag = `"${asset.id}-${variant}-${asset.committed_at ?? 0}"`;

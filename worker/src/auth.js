@@ -8,6 +8,9 @@ const JWKS_TTL_MS = 10 * 60_000;
 const JWKS_MIN_REFETCH_MS = 60_000;
 const SKEW_S = 60;
 const ANON = Object.freeze({ kind: 'anonymous' });
+// AUTH_MODE=test is an explicit allow-list: only these ENVIRONMENT values may ever honor X-Test-Actor. Anything else
+// (production, staging, unset, 'Production', ' staging', a typo) is refused, so a mis-set variable cannot open the API.
+const TEST_MODE_ENVIRONMENTS = new Set(['test', 'development', 'local']);
 
 const jwks = { url: '', keys: new Map(), fetchedAt: 0, attemptedAt: 0 };
 const warned = new Set();
@@ -117,8 +120,8 @@ async function userActor(email, env, wantAdmin) {
 export async function getActor(request, env) {
   try {
     if (env.AUTH_MODE === 'test') {
-      if (env.ENVIRONMENT === 'production' || env.ENVIRONMENT === 'staging') {
-        warnOnce('test-in-prod', 'AUTH_MODE=test is refused in production/staging');
+      if (!TEST_MODE_ENVIRONMENTS.has(env.ENVIRONMENT)) {
+        warnOnce('test-in-prod', 'AUTH_MODE=test is only honored when ENVIRONMENT is test/development/local');
         return ANON;
       }
       const raw = request.headers.get('X-Test-Actor') ?? '';
@@ -141,7 +144,13 @@ export async function getActor(request, env) {
     const claims = await verifyAccessJwt(token, env);
     if (!claims) return ANON;
     if (typeof claims.email === 'string' && claims.email.includes('@')) return await userActor(claims.email, env);
-    if (typeof claims.common_name === 'string' && claims.common_name) return { kind: 'service', serviceId: claims.common_name };
+    if (typeof claims.common_name === 'string' && claims.common_name) {
+      // Optional pin: PROCESSOR_SERVICE_IDS="<service token client id>[,<id>]" restricts which Access service tokens count as
+      // the processor (defence in depth on top of the Access policy). Unset = any service token of this Access app.
+      const pinned = String(env.PROCESSOR_SERVICE_IDS ?? '').split(',').map(x => x.trim()).filter(Boolean);
+      if (pinned.length && !pinned.includes(claims.common_name)) return ANON;
+      return { kind: 'service', serviceId: claims.common_name };
+    }
     return ANON;
   } catch {
     return ANON;
