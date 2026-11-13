@@ -1,11 +1,75 @@
 name = "l1-state-sync"
 main = "index.js"
-compatibility_date = "2024-01-01"
+compatibility_date = "2026-11-01"
 account_id = "265122b6d6f29457b0ca950c55f3ac6e"
+# Legacy hostname stays up for read-only GETs from old open tabs (see shared/contracts.js ROUTES note).
+workers_dev = true
+routes = [
+  { pattern = "l1.mbfdhub.com/api/*", zone_name = "mbfdhub.com" },
+]
+
+[vars]
+ENVIRONMENT = "production"
+AUTH_MODE = "access"
+ACCESS_TEAM_DOMAIN = "https://darl.cloudflareaccess.com"
+ACCESS_AUD = "SET_AT_DEPLOY"            # Access application AUD tag; the Worker fails closed while unset
+PUBLIC_ORIGIN = "https://l1.mbfdhub.com"
+OWNER_EMAILS = "pdarleyjr@gmail.com"    # seeds settings 'access.admins' on first migration only
 
 [[kv_namespaces]]
 binding = "L1_STATE"
 id = "ab51b926224c4400bd5c8f7b488d887b"
 
+[[d1_databases]]
+binding = "DB"
+database_name = "l1-builder"
+database_id = "4c6919bf-9b00-4c86-b980-18faaaa15e9a"
+migrations_dir = "migrations"
+
+[[r2_buckets]]
+binding = "ASSETS"
+bucket_name = "l1-builder-assets"
+
 [ai]
 binding = "AI"
+
+[triggers]
+crons = ["*/5 * * * *"]   # housekeeping: expired leases, pending-asset GC, stale reservations
+
+[observability]
+enabled = true
+
+[env.staging]
+name = "l1-state-sync-staging"
+workers_dev = false
+routes = [
+  { pattern = "l1-staging.mbfdhub.com/api/*", zone_name = "mbfdhub.com" },
+]
+
+[env.staging.vars]
+ENVIRONMENT = "staging"
+AUTH_MODE = "access"
+ACCESS_TEAM_DOMAIN = "https://darl.cloudflareaccess.com"
+ACCESS_AUD = "SET_AT_DEPLOY"
+PUBLIC_ORIGIN = "https://l1-staging.mbfdhub.com"
+OWNER_EMAILS = "pdarleyjr@gmail.com"
+
+[[env.staging.kv_namespaces]]
+binding = "L1_STATE"
+id = "265c6f83a6784e0a9b9d737f86eef0b2"   # l1-state-staging: copy of production legacy keys (2026-11-12) for migration rehearsal
+
+[[env.staging.d1_databases]]
+binding = "DB"
+database_name = "l1-builder-staging"
+database_id = "1e47ee4c-20ba-437d-9860-dd84a9e4d636"
+migrations_dir = "migrations"
+
+[[env.staging.r2_buckets]]
+binding = "ASSETS"
+bucket_name = "l1-builder-assets-staging"
+
+[env.staging.ai]
+binding = "AI"
+
+[env.staging.triggers]
+crons = ["*/5 * * * *"]
