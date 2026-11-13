@@ -6,6 +6,7 @@ export const SECURITY_HEADERS = Object.freeze({
   'Referrer-Policy': 'no-referrer',
   'X-Frame-Options': 'DENY',
   'Cache-Control': 'no-store',
+  'Content-Security-Policy': "default-src 'none'; frame-ancestors 'none'",
 });
 
 /** Error carrying a contract error code (shared/contracts.js ERROR_CODES); the router turns it into a JSON response. */
@@ -87,4 +88,17 @@ export function actorLabel(actor) {
   if (actor?.kind === 'user') return actor.email;
   if (actor?.kind === 'service') return `service:${actor.serviceId}`;
   return 'anonymous';
+}
+
+/** Response with no body (204/304/302...) carrying the standard security headers. */
+export function empty(status = 204, headers = {}) {
+  return new Response(null, { status, headers: { ...SECURITY_HEADERS, ...headers } });
+}
+
+/** Structured, secret-free log line (never pass request bodies, tokens or image bytes). */
+export function logEvent(level, event, fields = {}) {
+  const line = JSON.stringify({ level, event, ...fields });
+  if (level === 'error') console.error(line);
+  else if (level === 'warn') console.warn(line);
+  else console.log(line);
 }

@@ -1,161 +1,106 @@
-// Audit reproduction tests (sync-data part) for worker/index.js at c9e0d0e.
-// test.fails(...) = documented defect: the body asserts the CORRECT behaviour and is
-// expected to fail today. When a fix lands the test starts passing and vitest reports it,
-// at which point the `.fails` marker must be removed.
+// Audit reproduction tests (sync-data part), updated for the Studio Worker (docs/audit/sync-data.md).
+// The whole-document KV PUT API (SD-01/10/11/12/14/15) is replaced by revisioned planner ops; the legacy hostname
+// answers writes with 409 APP_UPDATED. Tests below assert the new contract. SD-09/SD-13 (quantity and bundle invariants)
+// live in the planner op engine (shared/planner.js, tests/shared) and are covered there.
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import worker from '../../worker/index.js';
+import { ADMIN, EDITOR, imagesFixture, makeEnv, ORIGIN, request, v1Fixture } from '../../worker/test/helpers/index.js';
 
-const ORIGIN = 'http://127.0.0.1:4173';
-const COMPS = ['CabRearZone', 'LS1', 'LS2', 'LS3', 'LS4', 'RS1', 'RS2', 'RS3', 'RS4', 'RS5', 'RR1'];
+vi.mock('../../shared/planner.js', async () => (await import('../../worker/test/helpers/fake-shared.js')).fakePlanner());
+vi.mock('../../shared/ids.js', async () => (await import('../../worker/test/helpers/fake-shared.js')).fakeIds());
+vi.mock('../../shared/validation.js', async () => (await import('../../worker/test/helpers/fake-shared.js')).fakeValidation());
 
-function makeEnv() {
-  const store = new Map();
-  const writes = [];
-  return {
-    store,
-    writes,
-    L1_STATE: {
-      async get(key) { return store.has(key) ? store.get(key) : null; },
-      async put(key, value) { writes.push({ key, bytes: Buffer.byteLength(value) }); store.set(key, value); },
-    },
-  };
+const LEGACY = 'https://l1-state-sync.pdarleyjr.workers.dev';
+const LEGACY_ORIGIN = 'http://127.0.0.1:4173';
+const FOG = '1 3/4 in Fog Nozzle (Elkhart Chief XD 175 GPM @ 75psi)';
+const TORCH = '1 1/2 Fog Nozzles';
+
+async function migratedEnv(images) {
+  const env = makeEnv({ kv: { allocations: v1Fixture(), ...(images ? { images } : {}) } });
+  const res = await worker.fetch(request('POST', '/api/admin/migrate-legacy', { actor: ADMIN, origin: ORIGIN }), env);
+  expect((await res.json()).done).toBe(true);
+  return env;
 }
-
-const call = (env, method, path, body) => worker.fetch(new Request(`https://worker.test${path}`, {
-  method,
-  headers: { Origin: ORIGIN, 'Content-Type': 'application/json' },
-  body: body === undefined ? undefined : (typeof body === 'string' ? body : JSON.stringify(body)),
+const ops = (env, clientOpId, op) => worker.fetch(request('POST', '/api/planner/ops', {
+  actor: EDITOR, origin: ORIGIN, json: { baseRevision: 1, clientOpId, ops: [op] },
 }), env);
-
-const emptyAllocations = () => Object.fromEntries(COMPS.map(c => [c, Array(15).fill('')]));
-const stateDoc = (patch = {}) => ({ allocations: emptyAllocations(), customQtys: {}, customTools: [], bundles: {}, removedItems: [], customDimensions: {}, ...patch });
-const b64 = bytes => 'A'.repeat(bytes);
-const photo = (uid, chars = 1000) => ({ uid, title: `Photo ${uid}`, fileName: `${uid}.jpg`, dataUrl: `data:image/jpeg;base64,${b64(chars)}` });
+const legacyCall = (env, method, path, body) => worker.fetch(new Request(`${LEGACY}${path}`, {
+  method, headers: { Origin: LEGACY_ORIGIN, 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+}), env);
 
 afterEach(() => { vi.useRealTimers(); });
 
-describe('state document: whole-document last-write-wins', () => {
-  test.fails('SD-01 a stale full-document PUT must not silently erase another device\'s edit', async () => {
-    const env = makeEnv();
-    const base = stateDoc();
-    await call(env, 'PUT', '/state', base);
-    // Device A and B both loaded `base`. A edits LS1, B edits RS1, each PUTs its full copy.
-    const a = stateDoc(); a.allocations.LS1[0] = 'Synthetic Tool A';
-    const b = stateDoc(); b.allocations.RS1[0] = 'Synthetic Tool B';
-    const ra = await call(env, 'PUT', '/state', a);
-    const rb = await call(env, 'PUT', '/state', b);
-    const saved = JSON.parse(env.store.get('allocations'));
-    const mergedOrRejected = rb.status === 409 ||
-      (saved.allocations.LS1[0] === 'Synthetic Tool A' && saved.allocations.RS1[0] === 'Synthetic Tool B');
-    expect(ra.status).toBe(200);
-    expect(mergedOrRejected).toBe(true); // observed: 200 and LS1[0] === '' (A's edit lost)
+describe('planner document: revisioned ops replace whole-document last-write-wins', () => {
+  test('SD-01 two devices holding the same base revision edit different compartments: neither edit is lost', async () => {
+    const env = await migratedEnv();
+    const a = await ops(env, 'op_deviceA01', { op: 'setSlot', comp: 'LS3', index: 0, value: FOG, expect: '' });
+    const b = await ops(env, 'op_deviceB01', { op: 'setSlot', comp: 'RS3', index: 0, value: FOG, expect: '' }); // B never saw A's revision
+    expect(a.status).toBe(200);
+    const merged = await b.json();
+    expect(merged.applied).toEqual([0]);
+    expect(merged.doc.allocations.LS3[0]).toBe(FOG);
+    expect(merged.doc.allocations.RS3[0]).toBe(FOG);
   });
 
-  test('SD-01 (characterization) observed: second PUT wins and A\'s edit is gone', async () => {
-    const env = makeEnv();
-    const a = stateDoc(); a.allocations.LS1[0] = 'Synthetic Tool A';
-    const b = stateDoc(); b.allocations.RS1[0] = 'Synthetic Tool B';
-    await call(env, 'PUT', '/state', a);
-    const rb = await call(env, 'PUT', '/state', b);
-    const saved = JSON.parse(env.store.get('allocations'));
-    expect(rb.status).toBe(200);
-    expect(saved.allocations.LS1[0]).toBe('');
-    expect(saved.allocations.RS1[0]).toBe('Synthetic Tool B');
+  test('SD-01 a stale edit of the SAME slot is reported as a conflict instead of silently overwriting', async () => {
+    const env = await migratedEnv();
+    await ops(env, 'op_deviceA02', { op: 'setSlot', comp: 'LS3', index: 1, value: FOG, expect: '' });
+    const stale = await (await ops(env, 'op_deviceB02', { op: 'setSlot', comp: 'LS3', index: 1, value: TORCH, expect: '' })).json();
+    expect(stale.conflicts).toEqual([{ index: 0, reason: 'PRECONDITION', current: FOG }]);
+    expect(stale.doc.allocations.LS3[1]).toBe(FOG);
   });
 
-  test.fails('SD-14 two writes in the same millisecond receive distinct, increasing revisions', async () => {
-    vi.useFakeTimers();
+  test('SD-14 writes in the same millisecond receive distinct, increasing revisions', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(new Date('2026-01-01T00:00:00.000Z'));
-    const env = makeEnv();
-    const r1 = await (await call(env, 'PUT', '/state', stateDoc())).json();
-    const r2 = await (await call(env, 'PUT', '/state', stateDoc())).json();
-    // The client pulls only when remoteTs > lastPushTs, so equal timestamps hide the second write.
-    expect(r2._serverTs).toBeGreaterThan(r1._serverTs);
+    const env = await migratedEnv();
+    const r1 = await (await ops(env, 'op_samems001', { op: 'setSlot', comp: 'LS3', index: 2, value: FOG, expect: '' })).json();
+    const r2 = await (await ops(env, 'op_samems002', { op: 'setSlot', comp: 'LS3', index: 3, value: FOG, expect: '' })).json();
+    expect(r2.revision).toBeGreaterThan(r1.revision);
+  });
+});
+
+describe('legacy whole-document API is closed (SD-01/10/11/12/15)', () => {
+  test.each([
+    ['SD-01 a stale full-document PUT cannot erase another device\'s edit', '/state', { allocations: { LS1: [] } }],
+    ['SD-15 unknown top-level fields are not persisted', '/state', { allocations: { LS1: ['Axe'] }, junk: 'x'.repeat(100_000) }],
+    ['SD-12 over-limit fields no longer fail silently half-way: the answer is a clear APP_UPDATED', '/state', { allocations: { LS1: Array(501).fill('') } }],
+    ['SD-10 duplicate image uids are not persisted', '/images', { uploadedImages: { LS1: [{ uid: 'd', dataUrl: 'data:image/png;base64,AAAA' }, { uid: 'd', dataUrl: 'data:image/png;base64,AAAA' }] }, featuredImages: {} }],
+    ['SD-10 a dangling featured upload is not persisted', '/images', { uploadedImages: {}, featuredImages: { LS1: { kind: 'uploaded', uid: 'gone' } } }],
+  ])('%s', async (_name, path, body) => {
+    const env = makeEnv({ kv: { allocations: v1Fixture() } });
+    const before = env.L1_STATE.values.get('allocations');
+    const res = await legacyCall(env, 'PUT', path, body);
+    expect(res.status).toBe(409);
+    expect((await res.json()).error.code).toBe('APP_UPDATED');
+    expect(env.L1_STATE.values.get('allocations')).toBe(before);
+    expect(env.L1_STATE.values.has('images')).toBe(false);
   });
 
-  test.fails('SD-11 a failing KV write returns a JSON 5xx instead of an unhandled exception', async () => {
-    const env = makeEnv();
+  test('SD-11 no KV write exists to fail: legacy PUT answers with JSON even when KV.put would throw', async () => {
+    const env = makeEnv({ kv: { allocations: v1Fixture() } });
     env.L1_STATE.put = async () => { throw new Error('KV PUT failed with 429 Too Many Requests'); };
-    let status = 'threw';
-    try { status = (await call(env, 'PUT', '/state', stateDoc())).status; } catch { /* unhandled */ }
-    expect([429, 503]).toContain(status); // observed: 'threw' (no try/catch around put at worker/index.js:~142)
-  });
-
-  test.fails('SD-15 unknown top-level fields are not persisted verbatim', async () => {
-    const env = makeEnv();
-    await call(env, 'PUT', '/state', { ...stateDoc(), junk: 'x'.repeat(200_000), _serverTs: 5 });
-    const saved = JSON.parse(env.store.get('allocations'));
-    expect(saved.junk).toBeUndefined(); // observed: 200 KB of arbitrary data stored
+    const res = await legacyCall(env, 'PUT', '/state', { allocations: {} });
+    expect(res.status).toBe(409);
   });
 });
 
-describe('validation gaps (state)', () => {
-  test('SD-09 (characterization) Worker accepts allocations exceeding customQtys (quantity enforcement is client-only)', async () => {
-    const env = makeEnv();
-    const doc = stateDoc({ customQtys: { 'Synthetic Tool A': 1 } });
-    doc.allocations.LS1[0] = doc.allocations.LS2[0] = doc.allocations.RS1[0] = 'Synthetic Tool A';
-    expect((await call(env, 'PUT', '/state', doc)).status).toBe(200);
+describe('images: legacy base64 document -> committed assets', () => {
+  test('SD-05 one new photo no longer re-sends the whole document: the legacy images read is a lightweight projection of URLs', async () => {
+    const env = await migratedEnv(imagesFixture());
+    const res = await worker.fetch(new Request(`${LEGACY}/images`, { headers: { Origin: LEGACY_ORIGIN } }), env);
+    const text = await res.text();
+    const doc = JSON.parse(text);
+    expect(doc.uploadedImages.LS1).toHaveLength(2);
+    expect(text).not.toMatch(/data:image/);
+    expect(doc.uploadedImages.LS1[0].dataUrl).toMatch(/^https:\/\/.*\/api\/public\/assets\/ast_[0-9a-z]+\/display$/);
   });
 
-  test.fails('SD-13 a bundle that references an empty or out-of-range slot is rejected', async () => {
-    const env = makeEnv();
-    const doc = stateDoc({ bundles: { LS1: [{ id: 'b1', name: 'Kit', colorIdx: 0, slotIndices: [0, 1, 40] }] } });
-    doc.allocations.LS1[0] = 'Synthetic Tool A'; // slot 1 empty, slot 40 does not exist (15 slots)
-    expect((await call(env, 'PUT', '/state', doc)).status).toBe(400);
-  });
-
-  test('SD-12 (characterization) 501 rows or a 301-char name make the whole state PUT fail (client enforces neither)', async () => {
-    const env = makeEnv();
-    const tall = stateDoc(); tall.allocations.LS1 = Array(501).fill('');
-    expect((await call(env, 'PUT', '/state', tall)).status).toBe(400);
-    const longName = stateDoc(); longName.customTools = [{ name: 'N'.repeat(301), qty: 1 }];
-    expect((await call(env, 'PUT', '/state', longName)).status).toBe(400);
-  });
-});
-
-describe('images document', () => {
-  const imageDoc = (uploadedImages, featuredImages = {}) => ({ uploadedImages, featuredImages });
-
-  test.fails('SD-10 duplicate image uid inside one compartment is rejected', async () => {
-    const env = makeEnv();
-    const res = await call(env, 'PUT', '/images', imageDoc({ LS1: [photo('dup'), photo('dup')] }));
-    expect(res.status).toBe(400);
-  });
-
-  test.fails('SD-10 a featured upload that points at a non-existent uid is rejected', async () => {
-    const env = makeEnv();
-    const res = await call(env, 'PUT', '/images', imageDoc({ LS1: [photo('x1')] }, { LS1: { kind: 'uploaded', uid: 'gone' } }));
-    expect(res.status).toBe(400);
-  });
-
-  test('SD-12 (characterization) a 301-char fileName/title rejects the entire images document', async () => {
-    const env = makeEnv();
-    const bad = { ...photo('x1'), fileName: 'f'.repeat(301) };
-    expect((await call(env, 'PUT', '/images', imageDoc({ LS1: [photo('x0'), bad] }))).status).toBe(400);
-  });
-
-  test('SD-05 (measurement) one new photo makes the client resend the entire document', async () => {
-    const env = makeEnv();
-    // Production-shaped: 11 compartments, ~2.9 MB of base64 total.
-    const uploaded = Object.fromEntries(COMPS.map(c => [c, [photo(`${c}-1`, 130_000), photo(`${c}-2`, 130_000)]]));
-    const before = JSON.stringify(imageDoc(uploaded));
-    expect((await call(env, 'PUT', '/images', before)).status).toBe(200);
-    uploaded.LS1.push(photo('LS1-new', 300_000));
-    const after = JSON.stringify(imageDoc(uploaded));
-    await call(env, 'PUT', '/images', after);
-    const delta = 300_000;
-    const bytesOnWire = Buffer.byteLength(after);
-    console.log(`SD-05 doc before=${Buffer.byteLength(before)} B, new photo=${delta} B, bytes PUT for that one photo=${bytesOnWire} B (${(bytesOnWire / delta).toFixed(1)}x)`);
-    expect(bytesOnWire / delta).toBeGreaterThan(8);
-    expect(env.writes.filter(w => w.key === 'images')).toHaveLength(2); // one full KV value rewrite per change
-  });
-
-  test('SD-05 (limits) Worker caps the document at 12 MB (below the 25 MiB KV value limit) but above the ~5M-char browser localStorage quota', async () => {
-    const env = makeEnv();
-    const make = n => JSON.stringify(imageDoc({ LS1: Array.from({ length: n }, (_, i) => photo(`p${i}`, 1_000_000)) }));
-    const ok = make(11); // ~11.0 MB
-    expect(ok.length).toBeGreaterThan(5_000_000); // cannot be mirrored into localStorage (see e2e SD-05)
-    expect((await call(env, 'PUT', '/images', ok)).status).toBe(200);
-    expect((await call(env, 'PUT', '/images', make(13))).status).toBe(413);
+  test('SD-10 a featured upload that points at a non-existent uid is skipped by the migration (reported, not stored)', async () => {
+    const images = { uploadedImages: {}, featuredImages: { LS1: { kind: 'uploaded', uid: 'gone' } } };
+    const env = makeEnv({ kv: { allocations: v1Fixture(), images } });
+    const out = await (await worker.fetch(request('POST', '/api/admin/migrate-legacy', { actor: ADMIN, origin: ORIGIN }), env)).json();
+    expect(out.report.skipped).toEqual([{ compId: 'LS1', reason: 'featured image not resolvable' }]);
+    expect((await env.DB.prepare('SELECT COUNT(*) n FROM main_images').first()).n).toBe(0);
   });
 });
