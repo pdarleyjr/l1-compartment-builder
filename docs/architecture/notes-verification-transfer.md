@@ -29,6 +29,7 @@ unverified: { [equipmentName]: string }                         // item needs ve
 |---|---|---|
 | `setNote` | `comp, text, expect` | `comp` ∈ `COMPARTMENT_IDS` and not locked, else `INVALID`/`NOT_FOUND`. `expect` = the text the client last saw (`''` if none). Current ≠ `expect` → no-op when current = `text`, else `PRECONDITION` (current text returned). `text:''` deletes. |
 | `setUnverified` | `name, reason` | `reason` string ≤ 300 or `null` (= verified, delete). Setting needs `name` in the effective inventory (`NOT_FOUND`). |
+| `removeSlot` | `comp, index, expect` | `expect` = the non-empty name the client saw at `index`. Unknown `comp` / `index` out of range → `NOT_FOUND`; current ≠ `expect` → `PRECONDITION` (current returned). Splices the slot out of `allocations` and `assignmentIds` and appends `''`/`null` (slot count unchanged), so items below move up **keeping their assignment ids**; that compartment's bundles drop `index` and decrement larger indices (emptied bundles are deleted). `removeCustomTool` and `setRemoved{true}` pack the same way. Clients: `diffDocs(..., {slotRemovals})` / planner-sync `hintRemoveSlot`. Old tabs keep emitting blanking `setSlot` (still valid). Deploy the Worker before Pages. |
 
 `diffDocs` emits `setNote` (compare `text` only) and `setUnverified` after tool/qty ops and before bundle ops.
 Old clients never emit these ops and keep both maps because the server applies ops to its own document.

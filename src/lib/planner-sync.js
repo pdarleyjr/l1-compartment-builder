@@ -104,7 +104,7 @@ export function describeConflict(op, conflict) {
   if (conflict.reason === 'NOT_FOUND') return `${where} no longer exists — your change was not kept.`;
   if (conflict.reason === 'INVALID') return `Your change to ${where} was not valid — it was not kept.`;
   const cur = typeof conflict.current === 'string' ? ` (now “${conflict.current || 'empty'}”)` : '';
-  return kind === 'setSlot' || kind === 'setSlotCount'
+  return kind === 'setSlot' || kind === 'setSlotCount' || kind === 'removeSlot'
     ? `Another device changed ${where}${cur} — kept their change.`
     : `Another device changed ${where} — kept their change.`;
 }
@@ -123,6 +123,7 @@ class PlannerEngine {
     this.queue = cache?.queue ?? [];
     this.ready = !!cache;
     this.pendingRenames = [];
+    this.pendingSlotRemovals = [];
     this.notices = [];
     this.flags = { offline: typeof navigator !== 'undefined' && navigator.onLine === false, authLost: false, problem: '', sending: false, loadFailed: false, storageError: false };
     this.retry = 0;
@@ -218,19 +219,25 @@ class PlannerEngine {
     this.pendingRenames = [...this.pendingRenames.filter(r => r.to !== from), { from, to }];
   }
 
+  /** Record that slot `index` of `comp` (holding `expect`) was removed with the slots below moved up, so the next diff emits removeSlot. */
+  hintRemoveSlot(comp, index, expect) {
+    this.pendingSlotRemovals = [...this.pendingSlotRemovals, { comp, index, expect }];
+  }
+
   /** Turn the unsent difference between the base (+queue) and the local view into a queue entry. */
   flushLocal() {
     clearTimeout(this.timers.flush);
     this.timers.flush = null;
-    if (!this.doc) { this.pendingRenames = []; return; }
+    if (!this.doc) { this.pendingRenames = []; this.pendingSlotRemovals = []; return; }
     let ops = [];
     try {
       const effective = applyOps(this.doc, queueOps(this.queue), {}).doc;
-      ops = diffDocs(readDoc(effective), this.view, { renames: this.pendingRenames });
+      ops = diffDocs(readDoc(effective), this.view, { renames: this.pendingRenames, slotRemovals: this.pendingSlotRemovals });
     } catch (err) {
       this.flags.problem = `Could not prepare your change (${err?.message ?? 'unknown error'}).`;
     }
     this.pendingRenames = [];
+    this.pendingSlotRemovals = [];
     if (ops.length) {
       const last = this.queue[this.queue.length - 1];
       if (last && !last.sent && last.ops.length + ops.length <= MAX_OPS_PER_ENTRY) last.ops = [...last.ops, ...ops];
@@ -344,7 +351,7 @@ class PlannerEngine {
  * @returns {{view:object, doc:object|null, revision:number, migrated:boolean|null, ready:boolean, status:SyncStatus,
  *   pending:number, notices:{id:string,message:string}[], authLost:boolean, problem:string, storageError:boolean,
  *   readOnly:boolean, update:(fn:(v:object)=>object)=>void, hintRename:(from:string,to:string)=>void,
- *   dismissNotice:(id:string)=>void, retryNow:()=>void}}
+ *   hintRemoveSlot:(comp:string,index:number,expect:string)=>void, dismissNotice:(id:string)=>void, retryNow:()=>void}}
  */
 export function usePlannerSync({ canEdit, signedOut = false }) {
   const engineRef = useRef(null);
@@ -355,9 +362,10 @@ export function usePlannerSync({ canEdit, signedOut = false }) {
   useEffect(() => { engine.setAccess(!!canEdit, !!signedOut); }, [engine, canEdit, signedOut]);
   const update = useCallback(fn => engine.update(fn), [engine]);
   const hintRename = useCallback((a, b) => engine.hintRename(a, b), [engine]);
+  const hintRemoveSlot = useCallback((c, i, e) => engine.hintRemoveSlot(c, i, e), [engine]);
   const dismissNotice = useCallback(id => engine.dismissNotice(id), [engine]);
   const retryNow = useCallback(() => engine.retryNow(), [engine]);
   return useMemo(() => ({
-    ...snap, readOnly: !canEdit || snap.migrated === false, update, hintRename, dismissNotice, retryNow,
-  }), [snap, canEdit, update, hintRename, dismissNotice, retryNow]);
+    ...snap, readOnly: !canEdit || snap.migrated === false, update, hintRename, hintRemoveSlot, dismissNotice, retryNow,
+  }), [snap, canEdit, update, hintRename, hintRemoveSlot, dismissNotice, retryNow]);
 }

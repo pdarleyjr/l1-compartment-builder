@@ -9,6 +9,7 @@ needs is same-origin under `/api` (Cloudflare Worker `l1-state-sync`, route
 
 - Eleven editable apparatus compartments and four apparatus overview screens
 - Searchable equipment assignment with inventory quantity enforcement
+- Clearing a slot moves the items below it up; moved items keep their identity
 - Bulk assignment, row expansion, equipment bundles, and full inventory CRUD
 - Placement Progress page: placed equipment by compartment and what is still to place
 - Revisioned, op-based planner sync (`src/lib/planner-sync.js`): edits are queued

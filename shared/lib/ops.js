@@ -24,6 +24,7 @@ const SHAPES = {
   renameEquipment: { from: 'name', to: 'name' },
   setNote: { comp: 'comp', text: 'noteText', expect: 'noteExpect' },
   setUnverified: { name: 'name', reason: 'reasonOrNull' },
+  removeSlot: { comp: 'comp', index: 'index', expect: 'name' },
 };
 // Plain text: \n and \t allowed, every other C0 control character (and DEL) rejected.
 // eslint-disable-next-line no-control-regex
@@ -84,9 +85,23 @@ class Conflict {
   }
 }
 
+/** Remove slot `index` of a compartment by shifting later slots up (slot count unchanged: '' / null appended; ids travel with items; bundles remapped). */
+function packSlot(doc, compId, index) {
+  const slots = doc.allocations[compId];
+  slots.splice(index, 1);
+  slots.push('');
+  const ids = doc.assignmentIds[compId];
+  if (Array.isArray(ids)) { ids.splice(index, 1); ids.push(null); }
+  if (doc.bundles?.[compId]) {
+    doc.bundles[compId] = doc.bundles[compId].map(b => ({
+      ...b, slotIndices: b.slotIndices.filter(i => i !== index).map(i => (i > index ? i - 1 : i)),
+    }));
+  }
+}
+
 function clearName(doc, name) {
   for (const [compId, slots] of Object.entries(doc.allocations)) {
-    slots.forEach((v, i) => { if (v === name) { slots[i] = ''; doc.assignmentIds[compId][i] = null; } });
+    for (let i = slots.length - 1; i >= 0; i--) if (slots[i] === name) packSlot(doc, compId, i);
   }
 }
 
@@ -130,6 +145,13 @@ const handlers = {
     const ids = doc.assignmentIds[op.comp];
     if (op.count < slots.length) { slots.length = op.count; ids.length = op.count; }
     while (slots.length < op.count) { slots.push(''); ids.push(null); }
+  },
+  removeSlot(doc, op) {
+    const slots = doc.allocations[op.comp];
+    if (!slots) throw new Conflict('NOT_FOUND', undefined, `unknown compartment ${op.comp}`);
+    if (op.index >= slots.length) throw new Conflict('NOT_FOUND', slots.length, 'slot index out of range');
+    if (slots[op.index] !== op.expect) throw new Conflict('PRECONDITION', slots[op.index]);
+    packSlot(doc, op.comp, op.index);
   },
   setCustomQty(doc, op) {
     if (op.qty === null) delete doc.customQtys[op.name];

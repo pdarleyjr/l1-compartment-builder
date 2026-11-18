@@ -46,3 +46,27 @@ describe('planner notes and verification (real shared engine)', () => {
     expect((await res.json()).conflicts[0]).toMatchObject({ reason: 'PRECONDITION', current: 'first' });
   });
 });
+
+describe('removeSlot (real shared engine)', () => {
+  it('applies, and GET returns the packed doc with the moved items\' assignment ids', async () => {
+    const env = await migratedEnv();
+    const read = async () => (await (await worker.fetch(request('GET', '/api/public/planner'), env)).json());
+    const start = await read();
+    // Put a second, different-id item below slot 0 so there is something to move up.
+    const fill = await post(env, { baseRevision: start.revision, clientOpId: 'op_rmslot01', ops: [
+      { op: 'setSlot', comp: 'LS3', index: 0, value: FOG, expect: '' }, { op: 'setSlot', comp: 'LS3', index: 1, value: FOG, expect: '' },
+    ] });
+    expect((await fill.json()).conflicts).toEqual([]);
+    const before = await read();
+    const ids = before.doc.assignmentIds.LS3;
+    const res = await post(env, { baseRevision: before.revision, clientOpId: 'op_rmslot02', ops: [{ op: 'removeSlot', comp: 'LS3', index: 0, expect: FOG }] });
+    const body = await res.json();
+    expect(res.status).toBe(200);
+    expect(body).toMatchObject({ applied: [0], conflicts: [] });
+    const after = await read();
+    expect(after.doc.allocations.LS3.slice(0, 2)).toEqual([FOG, '']);
+    expect(after.doc.allocations.LS3).toHaveLength(before.doc.allocations.LS3.length);
+    expect(after.doc.assignmentIds.LS3[0]).toBe(ids[1]);
+    expect(after.doc.assignmentIds.LS3[1]).toBeNull();
+  });
+});

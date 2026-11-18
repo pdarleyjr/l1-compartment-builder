@@ -253,8 +253,10 @@ test('SD-08 removing an inventory item prunes it from bundles', async ({ browser
   await page.getByRole('button', { name: 'Inventory Status', exact: true }).click();
   page.once('dialog', d => d.accept());
   await page.getByRole('button', { name: `Remove ${HOIST}`, exact: true }).click();
-  await expect.poll(() => api.view().allocations.LS1[0], { timeout: 5000 }).toBe('');
-  expect((api.view().bundles.LS1 ?? []).flatMap(b => b.slotIndices)).toEqual([1]);
+  // The removed item's slot is packed away: the remaining item moves up and the bundle follows it.
+  await expect.poll(() => api.view().allocations.LS1[0], { timeout: 5000 }).toBe(FOG);
+  expect(api.view().allocations.LS1[1]).toBe('');
+  expect((api.view().bundles.LS1 ?? []).flatMap(b => b.slotIndices)).toEqual([0]);
 });
 
 test('SD-05 (replaced) photos are never stored in localStorage; only the planner cache and queue are', async ({ browser }) => {
