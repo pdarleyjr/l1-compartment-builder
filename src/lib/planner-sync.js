@@ -111,7 +111,8 @@ export function describeConflict(op, conflict) {
 
 /** @typedef {'loading'|'saved'|'saving'|'offline'|'signin'|'problem'} SyncStatus */
 
-class PlannerEngine {
+/** Exported for tests; the app uses it through {@link usePlannerSync}. */
+export class PlannerEngine {
   constructor() {
     this.listeners = new Set();
     this.canEdit = false;
@@ -262,6 +263,9 @@ class PlannerEngine {
     this.emit();
     try {
       const res = await api('/planner/ops', { method: 'POST', json: { baseRevision: this.revision, clientOpId: entry.clientOpId, ops: entry.ops } });
+      // Edits made while this entry was in flight may still be only in the view (their flush timer has not fired):
+      // queue them before the base moves, or the rebase below would drop them.
+      this.flushLocal();
       this.flags.sending = false; this.flags.problem = ''; this.flags.offline = false; this.retry = 0;
       this.queue = this.queue.filter(e => e !== entry);
       for (const c of res?.conflicts ?? []) {
@@ -270,6 +274,7 @@ class PlannerEngine {
       if (res?.doc && Number.isInteger(res.revision) && res.revision >= this.revision) { this.doc = res.doc; this.revision = res.revision; this.migrated = true; }
       this.rebase();
     } catch (err) {
+      this.flushLocal(); // same as above: a rejected entry is rebased away, newer local edits must survive it
       this.flags.sending = false;
       this.handleSendError(err, entry);
     }
