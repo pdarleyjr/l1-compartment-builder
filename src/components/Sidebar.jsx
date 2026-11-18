@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { ChevronRight, LayoutGrid, LogOut, Package, RotateCcw, Settings, X } from 'lucide-react';
+import { ChevronRight, ClipboardList, LayoutGrid, LogOut, Package, RotateCcw, Settings, X } from 'lucide-react';
 import { COMPARTMENTS, OVERVIEWS } from '../../shared/apparatus.js';
 import SyncStatusPill from './SyncStatusPill.jsx';
 import { useIsDesktop } from './useIsDesktop.js';
@@ -119,6 +119,9 @@ export default function Sidebar({ activeTab, onNav, onClose, counts, totalPlaced
             ))}
             <SideBtn active={activeTab === 'inventory'} onClick={() => onNav('inventory')}>
               <Package size={13} />Inventory Status
+            </SideBtn>
+            <SideBtn active={activeTab === 'progress'} onClick={() => onNav('progress')}>
+              <ClipboardList size={13} />Placement Progress
             </SideBtn>
           </div>
         </div>

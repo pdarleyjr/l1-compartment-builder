@@ -65,8 +65,12 @@ export const MOUNT_STATUSES = Object.freeze(['existing', 'proposed', 'optional',
 export const PLANNER_SCHEMA = 2;
 export const PLANNER_OPS = Object.freeze([
   'setSlot', 'setSlotCount', 'setCustomQty', 'upsertCustomTool', 'removeCustomTool', 'setDimension', 'setRemoved',
-  'upsertBundle', 'deleteBundle', 'renameEquipment',
+  'upsertBundle', 'deleteBundle', 'renameEquipment', 'setNote', 'setUnverified', 'removeSlot',
 ]);
+// Compartments whose notes are locked (the export reports them as "protected"). Empty: every compartment, RS3 included,
+// has notes like any other (owner, 2026-11-18; RS3 was only to be left unchanged by that day's loadout update).
+export const NOTES_LOCKED_COMPARTMENTS = Object.freeze([]);
+export const NOTE_LIMITS = Object.freeze({ textMax: 2000, reasonMax: 300 });
 export const PLANNER_LIMITS = Object.freeze({ maxOpsPerRequest: 200, maxSlotsPerCompartment: 500 });
 export const CONFLICT_REASONS = Object.freeze(['PRECONDITION', 'QUANTITY', 'NOT_FOUND', 'INVALID']);
 

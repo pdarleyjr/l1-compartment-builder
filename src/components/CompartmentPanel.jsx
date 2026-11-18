@@ -3,6 +3,8 @@ import {
   AlertCircle, ChevronDown, Layers, ListPlus, Plus, Ruler, Settings, Sparkles, Trash2, X, CheckSquare, Square,
 } from 'lucide-react';
 import { SLOTS_PER_COMPARTMENT } from '../../shared/apparatus.js';
+import { NOTES_LOCKED_COMPARTMENTS } from '../../shared/contracts.js';
+import CompartmentNotes from './CompartmentNotes.jsx';
 import ActionButtons from './ActionButtons.jsx';
 import ComboSlot from './ComboSlot.jsx';
 import CompartmentMedia from './CompartmentMedia.jsx';
@@ -13,7 +15,7 @@ import { BUNDLE_COLORS } from './usePlanActions.js';
  * render with key={comp.id} so it resets when the compartment changes.
  * @param {object} props see App.jsx for the wiring
  */
-export default function CompartmentPanel({ comp, allocations, bundles, plan, actions, readOnly, onExport, session, signIn, plannerRevision, mainImage, studioAvailable, onOpenStudio }) {
+export default function CompartmentPanel({ comp, allocations, bundles, plan, actions, readOnly, onExport, session, signIn, plannerRevision, mainImage, studioAvailable, onOpenStudio, notes, serverNotes, sync }) {
   const { getQty, getOptions, placedStats, effectiveDimensions } = plan;
   const [bundleMode, setBundleMode]         = useState(false);
   const [selectedSlots, setSelectedSlots]   = useState([]);
@@ -23,6 +25,12 @@ export default function CompartmentPanel({ comp, allocations, bundles, plan, act
   const [bulkFillItem, setBulkFillItem]     = useState('');
   const [bulkFillQty, setBulkFillQty]       = useState(1);
   const [expandedBundles, setExpandedBundles] = useState({});
+
+  // Clearing a slot moves later slots up, so keep the bundle-mode selection pointing at the same items.
+  const clearAt = (compId, idx) => {
+    setSelectedSlots(prev => prev.filter(i => i !== idx).map(i => (i > idx ? i - 1 : i)));
+    actions.clearSlot(compId, idx);
+  };
 
   const handleBulkFill = (compId) => {
     if (!bulkFillItem) return;
@@ -255,7 +263,7 @@ export default function CompartmentPanel({ comp, allocations, bundles, plan, act
                         <ComboSlot
                           options={options}
                           value={cur}
-                          onChange={val => actions.assign(comp.id, idx, val)}
+                          onChange={val => (val === '' ? clearAt(comp.id, idx) : actions.assign(comp.id, idx, val))}
                           readOnly={readOnly}
                           getQty={getQty}
                           placedStats={placedStats}
@@ -268,7 +276,7 @@ export default function CompartmentPanel({ comp, allocations, bundles, plan, act
                           </span>
                         )}
                         {!readOnly && <button
-                          onClick={() => actions.clearSlot(comp.id, idx)}
+                          onClick={() => clearAt(comp.id, idx)}
                           disabled={!cur}
                           data-touch-target="true" aria-label={`Clear slot ${idx + 1}`}
                           className={`touch-target p-1 rounded transition-colors shrink-0 ${
@@ -306,6 +314,11 @@ export default function CompartmentPanel({ comp, allocations, bundles, plan, act
                 )}
               </div>}
             </div>
+
+            {!NOTES_LOCKED_COMPARTMENTS.includes(comp.id) && (
+              <CompartmentNotes comp={comp} note={notes?.[comp.id]} serverNote={serverNotes?.[comp.id]} sync={sync}
+                readOnly={readOnly} onSave={text => actions.setNote(comp.id, text)} />
+            )}
 
             {/* Existing bundles — collapsible */}
             {compBundles.length > 0 && (

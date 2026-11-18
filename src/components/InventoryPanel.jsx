@@ -1,8 +1,11 @@
 import React, { useState } from 'react';
-import { AlertCircle, CheckCircle, Pencil, Ruler, Save, Trash2, X } from 'lucide-react';
+import { AlertCircle, CheckCircle, HelpCircle, Pencil, Ruler, Save, Trash2, X } from 'lucide-react';
 import { COMP_LABEL } from '../../shared/apparatus.js';
 import ActionButtons from './ActionButtons.jsx';
 import AddToolForm from './AddToolForm.jsx';
+
+// eslint-disable-next-line no-control-regex
+const REASON_STRIP = /[\u0000-\u001F\u007F]/g;
 
 /**
  * Inventory Status panel: editable quantities, dimensions, names and custom tools.
@@ -10,9 +13,11 @@ import AddToolForm from './AddToolForm.jsx';
  *   readOnly:boolean, onExport:()=>void}} props
  */
 export default function InventoryPanel({ plan, actions, readOnly, onExport }) {
-  const { effectiveInventory, effectiveDimensions, getQty, placedStats, totalPlaced, totalReq, isCustom: isCustomName } = plan;
+  const { unverified = {}, effectiveInventory, effectiveDimensions, getQty, placedStats, totalPlaced, totalReq, isCustom: isCustomName } = plan;
   const [editingItem, setEditingItem] = useState(null);
   const [editValues, setEditValues]   = useState({});
+  const [verifyItem, setVerifyItem]     = useState(null);
+  const [verifyReason, setVerifyReason] = useState('');
   const handleRemoveItem = actions.removeItem;
 
   const startEdit = (item) => {
@@ -173,8 +178,12 @@ export default function InventoryPanel({ plan, actions, readOnly, onExport }) {
                     );
                   }
 
+                  const needsVerify = item.name in unverified;
+                  const verifying   = verifyItem === item.name;
+
                   return (
-                    <tr key={item.name}
+                    <React.Fragment key={item.name}>
+                    <tr
                       className={`transition-colors ${
                         overPlaced  ? 'bg-red-50'
                         : full      ? 'bg-green-50'
@@ -185,6 +194,14 @@ export default function InventoryPanel({ plan, actions, readOnly, onExport }) {
                         <span>{item.name}</span>
                         {isCustom && (
                           <span className="ml-2 text-[9px] font-bold uppercase tracking-wide text-amber-600 bg-amber-50 border border-amber-200 rounded px-1 py-0.5">custom</span>
+                        )}
+                        {needsVerify && (
+                          <span className="ml-2 inline-flex items-center gap-1 text-[10px] font-bold text-amber-800 bg-amber-50 border border-amber-300 rounded px-1.5 py-0.5">
+                            <HelpCircle size={10} aria-hidden="true" /> Needs verification
+                          </span>
+                        )}
+                        {needsVerify && unverified[item.name] && (
+                          <span className="block mt-1 text-[11px] font-normal text-slate-600">Reason: {unverified[item.name]}</span>
                         )}
                         {effectiveDimensions[item.name] && (
                           <span className="lg:hidden block mt-1 font-mono text-[10px] font-normal text-indigo-700">
@@ -223,6 +240,12 @@ export default function InventoryPanel({ plan, actions, readOnly, onExport }) {
                             className="touch-target p-1.5 rounded text-slate-400 hover:text-blue-600 hover:bg-blue-50 active:bg-blue-100 transition-colors touch-manipulation">
                             <Pencil size={13} />
                           </button>
+                          <button onClick={() => { setVerifyItem(item.name); setVerifyReason(unverified[item.name] ?? ''); }}
+                            aria-label={needsVerify ? `Edit verification for ${item.name}` : `Mark ${item.name} as needs verification`}
+                            title={needsVerify ? 'Edit verification' : 'Mark as needs verification'} data-touch-target="true"
+                            className={`touch-target p-1.5 rounded hover:bg-amber-50 active:bg-amber-100 transition-colors touch-manipulation ${needsVerify ? 'text-amber-600' : 'text-slate-400 hover:text-amber-600'}`}>
+                            <HelpCircle size={13} />
+                          </button>
                           <button onClick={() => handleRemoveItem(item.name)}
                             aria-label={`Remove ${item.name}`} title="Remove item" data-touch-target="true"
                             className="touch-target p-1.5 rounded text-slate-400 hover:text-red-600 hover:bg-red-50 active:bg-red-100 transition-colors touch-manipulation">
@@ -232,6 +255,40 @@ export default function InventoryPanel({ plan, actions, readOnly, onExport }) {
                       </td>
                       )}
                     </tr>
+                    {verifying && !readOnly && (
+                      <tr className="bg-amber-50 print:hidden">
+                        <td colSpan={8} className="px-4 py-3">
+                          <label className="block text-[10px] font-bold uppercase tracking-wide text-amber-800 mb-1" htmlFor={`verify-${idx}`}>
+                            Needs verification — reason (optional, up to 300 characters)
+                          </label>
+                          <div className="flex flex-col sm:flex-row gap-2">
+                            <input id={`verify-${idx}`} autoFocus maxLength={300} value={verifyReason}
+                              aria-label={`Verification reason for ${item.name}`}
+                              onChange={e => setVerifyReason(e.target.value.replace(REASON_STRIP, ''))}
+                              onKeyDown={e => { if (e.key === 'Escape') setVerifyItem(null); }}
+                              placeholder="e.g. Model number not confirmed"
+                              className="min-h-11 flex-1 border-2 border-amber-300 rounded px-2 py-1 text-xs focus:ring-2 focus:ring-amber-400 outline-none bg-white text-slate-800" />
+                            <button type="button" data-touch-target="true"
+                              onClick={() => { actions.setUnverified(item.name, verifyReason); setVerifyItem(null); }}
+                              className="touch-target min-h-11 px-4 rounded-lg text-sm font-semibold bg-slate-800 text-white hover:bg-slate-700 touch-manipulation">
+                              {needsVerify ? 'Update' : 'Mark needs verification'}
+                            </button>
+                            {needsVerify && (
+                              <button type="button" data-touch-target="true"
+                                onClick={() => { actions.setUnverified(item.name, null); setVerifyItem(null); }}
+                                className="touch-target min-h-11 px-4 rounded-lg text-sm font-semibold border border-slate-300 text-slate-700 hover:bg-slate-50 touch-manipulation">
+                                Mark verified
+                              </button>
+                            )}
+                            <button type="button" data-touch-target="true" onClick={() => setVerifyItem(null)}
+                              className="touch-target min-h-11 px-4 rounded-lg text-sm font-semibold border border-slate-300 text-slate-700 hover:bg-slate-50 touch-manipulation">
+                              Cancel
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                    </React.Fragment>
                   );
                 })}
               </tbody>

@@ -36,28 +36,51 @@ export function pruneBundles(allocations, bundles) {
   return out;
 }
 
+/**
+ * Remove slot `index` of a compartment in a v1 view by moving later slots up ('' appended, count unchanged) and
+ * remapping that compartment's bundles exactly like the server's removeSlot op. Pure.
+ */
+export function packSlotInView(v, compId, index) {
+  const slots = v.allocations[compId];
+  if (!slots || index < 0 || index >= slots.length) return v;
+  const next = [...slots.slice(0, index), ...slots.slice(index + 1), ''];
+  const allocations = { ...v.allocations, [compId]: next };
+  const bundles = v.bundles[compId]
+    ? { ...v.bundles, [compId]: v.bundles[compId].map(b => ({ ...b, slotIndices: b.slotIndices.filter(i => i !== index).map(i => (i > index ? i - 1 : i)) })) }
+    : v.bundles;
+  return { ...v, allocations, bundles: pruneBundles(allocations, bundles) };
+}
+
 const emptyAllocations = () => Object.fromEntries(COMPARTMENTS.map(c => [c.id, Array(SLOTS_PER_COMPARTMENT).fill('')]));
 
 /**
  * Planner mutations. Every one is a functional update of the local view; planner-sync turns the difference into ops.
- * @param {{update:(fn:(v:object)=>object)=>void, hintRename:(from:string,to:string)=>void}} sync
+ * @param {{update:(fn:(v:object)=>object)=>void, hintRename:(from:string,to:string)=>void, hintRemoveSlot:(comp:string,index:number,expect:string)=>void}} sync
  * @param {ReturnType<import('./usePlan.js').default>} plan
  */
-export default function usePlanActions({ update, hintRename }, plan) {
+export default function usePlanActions({ update, hintRename, hintRemoveSlot }, plan) {
   const { getQty, placedStats, effectiveInventory, isCustom } = plan;
   return useMemo(() => {
+    const actions = {}; // filled below so assign can reuse clearSlot
     const withAllocations = (v, allocations) => ({ ...v, allocations, bundles: pruneBundles(allocations, v.bundles) });
-    return {
-      assign: (compId, idx, val) => update(v => {
-        const allocations = { ...v.allocations, [compId]: [...v.allocations[compId]] };
-        allocations[compId][idx] = val;
-        return val === '' ? withAllocations(v, allocations) : { ...v, allocations };
-      }),
-      clearSlot: (compId, idx) => update(v => {
-        const allocations = { ...v.allocations, [compId]: [...v.allocations[compId]] };
-        allocations[compId][idx] = '';
-        return withAllocations(v, allocations);
-      }),
+    Object.assign(actions, {
+      assign: (compId, idx, val) => {
+        if (val === '') { actions.clearSlot(compId, idx); return; }
+        update(v => {
+          const allocations = { ...v.allocations, [compId]: [...v.allocations[compId]] };
+          allocations[compId][idx] = val;
+          return { ...v, allocations };
+        });
+      },
+      /** Clearing a slot moves the items below it up (server-side removeSlot; assignment ids and bundles follow). */
+      clearSlot: (compId, idx) => {
+        let removed = '';
+        update(v => {
+          removed = v.allocations[compId]?.[idx] ?? '';
+          return removed ? packSlotInView(v, compId, idx) : v;
+        });
+        if (removed) hintRemoveSlot(compId, idx, removed);
+      },
       /** @returns {{filled:number, message:string}} message is non-empty when nothing (or fewer than asked) was filled */
       bulkFill: (compId, item, qty, currentAllocations) => {
         const available = getQty(item) - (placedStats[item]?.total ?? 0);
@@ -90,17 +113,40 @@ export default function usePlanActions({ update, hintRename }, plan) {
         if (slots.length <= SLOTS_PER_COMPARTMENT || slots[slots.length - 1] !== '') return v;
         return withAllocations(v, { ...v.allocations, [compId]: slots.slice(0, -1) });
       }),
+      /** Set (or, with blank text, delete) the compartment note. Trailing whitespace is trimmed. */
+      setNote: (compId, text) => update(v => {
+        const clean = String(text ?? '').replace(/\s+$/, '');
+        const notes = { ...(v.notes ?? {}) };
+        if ((notes[compId]?.text ?? '') === clean) return v;
+        if (clean) notes[compId] = { text: clean, updatedAt: Date.now() }; else delete notes[compId];
+        return { ...v, notes };
+      }),
+      /** reason string (may be '') marks the item "needs verification"; null marks it verified. */
+      setUnverified: (name, reason) => update(v => {
+        const unverified = { ...(v.unverified ?? {}) };
+        if (reason === null) delete unverified[name]; else unverified[name] = String(reason).trim();
+        return JSON.stringify(unverified) === JSON.stringify(v.unverified ?? {}) ? v : { ...v, unverified };
+      }),
       reset: () => update(v => withAllocations(v, emptyAllocations())),
       addTool: ({ name, qty, dimensions }) => update(v => ({ ...v, customTools: [...v.customTools, { name, qty, dimensions }] })),
       removeItem: name => {
         if (!window.confirm(`Remove "${name}" from inventory? It will be cleared from all compartments.`)) return;
         update(v => {
           const allocations = {};
-          for (const [compId, slots] of Object.entries(v.allocations)) allocations[compId] = slots.map(s => (s === name ? '' : s));
+          for (const [compId, slots] of Object.entries(v.allocations)) {
+            const kept = slots.filter(s => s !== name);
+            allocations[compId] = [...kept, ...Array(slots.length - kept.length).fill('')];
+          }
           const customQtys = { ...v.customQtys }; delete customQtys[name];
+          const unverified = { ...(v.unverified ?? {}) }; delete unverified[name];
           const custom = isCustom(name);
+          // Bundles are remapped per removed slot (highest index first), exactly like the server's packing.
+          let packed = { ...v, allocations: v.allocations };
+          for (const [compId, slots] of Object.entries(v.allocations)) {
+            for (let i = slots.length - 1; i >= 0; i--) if (slots[i] === name) packed = packSlotInView(packed, compId, i);
+          }
           return withAllocations({
-            ...v, customQtys,
+            ...v, bundles: packed.bundles, customQtys, unverified,
             customTools: custom ? v.customTools.filter(t => t.name !== name) : v.customTools,
             removedItems: custom || v.removedItems.includes(name) ? v.removedItems : [...v.removedItems, name],
           }, allocations);
@@ -125,8 +171,10 @@ export default function usePlanActions({ update, hintRename }, plan) {
             const customQtys = { ...v.customQtys }; delete customQtys[item.name]; customQtys[newName] = newQty;
             const customDimensions = { ...v.customDimensions }; delete customDimensions[item.name];
             if (newDims) customDimensions[newName] = newDims;
+            const unverified = { ...(v.unverified ?? {}) };
+            if (item.name in unverified) { unverified[newName] = unverified[item.name]; delete unverified[item.name]; }
             return {
-              ...v, allocations, customQtys, customDimensions,
+              ...v, allocations, customQtys, customDimensions, unverified,
               customTools: custom
                 ? v.customTools.map(t => (t.name === item.name ? { ...t, name: newName, qty: newQty, dimensions: newDims } : t))
                 : [...v.customTools, { name: newName, qty: newQty, dimensions: newDims }],
@@ -142,6 +190,7 @@ export default function usePlanActions({ update, hintRename }, plan) {
         });
         return true;
       },
-    };
-  }, [update, hintRename, getQty, placedStats, effectiveInventory, isCustom]);
+    });
+    return actions;
+  }, [update, hintRename, hintRemoveSlot, getQty, placedStats, effectiveInventory, isCustom]);
 }

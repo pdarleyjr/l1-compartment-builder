@@ -22,7 +22,7 @@ const str = v => (typeof v === 'string' ? v : '');
 export function emptyView() {
   const allocations = {};
   COMPARTMENTS.forEach(c => { allocations[c.id] = Array(SLOTS_PER_COMPARTMENT).fill(''); });
-  return { allocations, customQtys: {}, customTools: [], bundles: {}, removedItems: [], customDimensions: {} };
+  return { allocations, customQtys: {}, customTools: [], bundles: {}, removedItems: [], customDimensions: {}, notes: {}, unverified: {} };
 }
 
 /**
@@ -48,9 +48,17 @@ export function sanitizeView(raw) {
   if (Array.isArray(raw.customTools)) {
     out.customTools = raw.customTools.filter(t => isObj(t) && str(t.name)).map(t => ({
       name: t.name, qty: Number.isFinite(t.qty) ? t.qty : 1, dimensions: str(t.dimensions),
+      ...(str(t.description) && t.description.length <= 2000 ? { description: t.description } : {}),
     }));
   }
   if (isObj(raw.customDimensions)) for (const [k, v] of Object.entries(raw.customDimensions)) if (typeof v === 'string') out.customDimensions[k] = v;
+  if (isObj(raw.notes)) {
+    for (const c of COMPARTMENTS) {
+      const n = raw.notes[c.id];
+      if (isObj(n) && typeof n.text === 'string' && n.text && Number.isFinite(n.updatedAt)) out.notes[c.id] = { text: n.text, updatedAt: n.updatedAt };
+    }
+  }
+  if (isObj(raw.unverified)) for (const [k, v] of Object.entries(raw.unverified)) if (typeof v === 'string') out.unverified[k] = v;
   if (Array.isArray(raw.removedItems)) out.removedItems = [...new Set(raw.removedItems.filter(v => typeof v === 'string'))];
   if (isObj(raw.bundles)) {
     for (const [comp, list] of Object.entries(raw.bundles)) {
@@ -96,14 +104,15 @@ export function describeConflict(op, conflict) {
   if (conflict.reason === 'NOT_FOUND') return `${where} no longer exists — your change was not kept.`;
   if (conflict.reason === 'INVALID') return `Your change to ${where} was not valid — it was not kept.`;
   const cur = typeof conflict.current === 'string' ? ` (now “${conflict.current || 'empty'}”)` : '';
-  return kind === 'setSlot' || kind === 'setSlotCount'
+  return kind === 'setSlot' || kind === 'setSlotCount' || kind === 'removeSlot'
     ? `Another device changed ${where}${cur} — kept their change.`
     : `Another device changed ${where} — kept their change.`;
 }
 
 /** @typedef {'loading'|'saved'|'saving'|'offline'|'signin'|'problem'} SyncStatus */
 
-class PlannerEngine {
+/** Exported for tests; the app uses it through {@link usePlannerSync}. */
+export class PlannerEngine {
   constructor() {
     this.listeners = new Set();
     this.canEdit = false;
@@ -115,6 +124,7 @@ class PlannerEngine {
     this.queue = cache?.queue ?? [];
     this.ready = !!cache;
     this.pendingRenames = [];
+    this.pendingSlotRemovals = [];
     this.notices = [];
     this.flags = { offline: typeof navigator !== 'undefined' && navigator.onLine === false, authLost: false, problem: '', sending: false, loadFailed: false, storageError: false };
     this.retry = 0;
@@ -210,19 +220,25 @@ class PlannerEngine {
     this.pendingRenames = [...this.pendingRenames.filter(r => r.to !== from), { from, to }];
   }
 
+  /** Record that slot `index` of `comp` (holding `expect`) was removed with the slots below moved up, so the next diff emits removeSlot. */
+  hintRemoveSlot(comp, index, expect) {
+    this.pendingSlotRemovals = [...this.pendingSlotRemovals, { comp, index, expect }];
+  }
+
   /** Turn the unsent difference between the base (+queue) and the local view into a queue entry. */
   flushLocal() {
     clearTimeout(this.timers.flush);
     this.timers.flush = null;
-    if (!this.doc) { this.pendingRenames = []; return; }
+    if (!this.doc) { this.pendingRenames = []; this.pendingSlotRemovals = []; return; }
     let ops = [];
     try {
       const effective = applyOps(this.doc, queueOps(this.queue), {}).doc;
-      ops = diffDocs(readDoc(effective), this.view, { renames: this.pendingRenames });
+      ops = diffDocs(readDoc(effective), this.view, { renames: this.pendingRenames, slotRemovals: this.pendingSlotRemovals });
     } catch (err) {
       this.flags.problem = `Could not prepare your change (${err?.message ?? 'unknown error'}).`;
     }
     this.pendingRenames = [];
+    this.pendingSlotRemovals = [];
     if (ops.length) {
       const last = this.queue[this.queue.length - 1];
       if (last && !last.sent && last.ops.length + ops.length <= MAX_OPS_PER_ENTRY) last.ops = [...last.ops, ...ops];
@@ -247,6 +263,9 @@ class PlannerEngine {
     this.emit();
     try {
       const res = await api('/planner/ops', { method: 'POST', json: { baseRevision: this.revision, clientOpId: entry.clientOpId, ops: entry.ops } });
+      // Edits made while this entry was in flight may still be only in the view (their flush timer has not fired):
+      // queue them before the base moves, or the rebase below would drop them.
+      this.flushLocal();
       this.flags.sending = false; this.flags.problem = ''; this.flags.offline = false; this.retry = 0;
       this.queue = this.queue.filter(e => e !== entry);
       for (const c of res?.conflicts ?? []) {
@@ -255,6 +274,7 @@ class PlannerEngine {
       if (res?.doc && Number.isInteger(res.revision) && res.revision >= this.revision) { this.doc = res.doc; this.revision = res.revision; this.migrated = true; }
       this.rebase();
     } catch (err) {
+      this.flushLocal(); // same as above: a rejected entry is rebased away, newer local edits must survive it
       this.flags.sending = false;
       this.handleSendError(err, entry);
     }
@@ -336,7 +356,7 @@ class PlannerEngine {
  * @returns {{view:object, doc:object|null, revision:number, migrated:boolean|null, ready:boolean, status:SyncStatus,
  *   pending:number, notices:{id:string,message:string}[], authLost:boolean, problem:string, storageError:boolean,
  *   readOnly:boolean, update:(fn:(v:object)=>object)=>void, hintRename:(from:string,to:string)=>void,
- *   dismissNotice:(id:string)=>void, retryNow:()=>void}}
+ *   hintRemoveSlot:(comp:string,index:number,expect:string)=>void, dismissNotice:(id:string)=>void, retryNow:()=>void}}
  */
 export function usePlannerSync({ canEdit, signedOut = false }) {
   const engineRef = useRef(null);
@@ -347,9 +367,10 @@ export function usePlannerSync({ canEdit, signedOut = false }) {
   useEffect(() => { engine.setAccess(!!canEdit, !!signedOut); }, [engine, canEdit, signedOut]);
   const update = useCallback(fn => engine.update(fn), [engine]);
   const hintRename = useCallback((a, b) => engine.hintRename(a, b), [engine]);
+  const hintRemoveSlot = useCallback((c, i, e) => engine.hintRemoveSlot(c, i, e), [engine]);
   const dismissNotice = useCallback(id => engine.dismissNotice(id), [engine]);
   const retryNow = useCallback(() => engine.retryNow(), [engine]);
   return useMemo(() => ({
-    ...snap, readOnly: !canEdit || snap.migrated === false, update, hintRename, dismissNotice, retryNow,
-  }), [snap, canEdit, update, hintRename, dismissNotice, retryNow]);
+    ...snap, readOnly: !canEdit || snap.migrated === false, update, hintRename, hintRemoveSlot, dismissNotice, retryNow,
+  }), [snap, canEdit, update, hintRename, hintRemoveSlot, dismissNotice, retryNow]);
 }

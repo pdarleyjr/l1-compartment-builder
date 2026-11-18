@@ -1,0 +1,4 @@
+{
+  "comment": "Temporary npm audit exceptions read by scripts/ci/audit.mjs. Each one must be dev/build tooling only, have no published fix, and expire. Remove an entry as soon as a fixed version is installed; the audit gate fails by itself when a fix is published, when the advisory reaches a production dependency, or after the expiry date.",
+  "exceptions": []
+}

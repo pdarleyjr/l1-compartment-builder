@@ -52,7 +52,7 @@ test.describe('photos and carousel', () => {
     api.addAsset('LS1', { title: 'mount-photo' });
     await boot(page, { api });
     await nav(page, isMobile, /^LS1/);
-    await page.getByRole('button', { name: 'Show image 2 of 2' }).click();
+    await page.getByRole('button', { name: 'Show image 3 of 3' }).click();
     await expect(page.getByRole('img', { name: 'mount-photo' })).toBeVisible();
     let message = '';
     page.once('dialog', d => { message = d.message(); d.dismiss(); });
@@ -68,8 +68,10 @@ test.describe('photos and carousel', () => {
   test('FM-12 carousel responds to the ArrowRight key and to a horizontal swipe', async ({ page, isMobile }) => {
     await boot(page);
     await nav(page, isMobile, /^LS2/);
-    await expect(page.getByRole('img', { name: 'Compartment Photo' })).toBeVisible();
-    await page.getByRole('button', { name: 'Show image 1 of 2' }).focus();
+    await expect(page.getByRole('img', { name: 'Loadout Rendering (2026-11-18)' })).toBeVisible();
+    await page.getByRole('button', { name: 'Show image 1 of 3' }).focus();
+    await page.keyboard.press('ArrowRight');
+    await expect(page.getByRole('img', { name: 'Compartment Photo' })).toBeVisible({ timeout: 1000 });
     await page.keyboard.press('ArrowRight');
     await expect(page.getByRole('img', { name: 'Rendering with Tools' })).toBeVisible({ timeout: 1000 });
     // swipe left on the image area (pointer events, as a touch drag produces) moves to the next image, i.e. wraps to the first
@@ -77,14 +79,14 @@ test.describe('photos and carousel', () => {
       const fire = (type, x) => img.dispatchEvent(new PointerEvent(type, { bubbles: true, pointerType: 'touch', clientX: x, clientY: 100 }));
       fire('pointerdown', 300); fire('pointerup', 120);
     });
-    await expect(page.getByRole('img', { name: 'Compartment Photo' })).toBeVisible({ timeout: 1000 });
+    await expect(page.getByRole('img', { name: 'Loadout Rendering (2026-11-18)' })).toBeVisible({ timeout: 1000 });
   });
 
   test('FM-13 the active carousel dot is exposed to assistive technology', async ({ page, isMobile }) => {
     await boot(page);
     await nav(page, isMobile, /^LS2/);
-    await expect(page.getByRole('button', { name: 'Show image 1 of 2' })).toHaveAttribute('aria-current', 'true');
-    await expect(page.getByRole('button', { name: 'Show image 2 of 2' })).not.toHaveAttribute('aria-current', /.+/);
+    await expect(page.getByRole('button', { name: 'Show image 1 of 3' })).toHaveAttribute('aria-current', 'true');
+    await expect(page.getByRole('button', { name: 'Show image 2 of 3' })).not.toHaveAttribute('aria-current', /.+/);
     await expect(page.getByRole('region', { name: /Images for LS2/ })).toHaveAttribute('aria-roledescription', 'carousel');
   });
 
@@ -93,8 +95,8 @@ test.describe('photos and carousel', () => {
     for (let i = 0; i < 20; i++) api.addAsset('LS1', { title: `p${i}` });
     await boot(page, { api });
     await nav(page, isMobile, /^LS1/);
-    await expect(page.getByRole('button', { name: /Show image 21 of 21/ })).toBeVisible();
-    await page.getByRole('button', { name: 'Show image 21 of 21' }).click();
+    await expect(page.getByRole('button', { name: /Show image 22 of 22/ })).toBeVisible();
+    await page.getByRole('button', { name: 'Show image 22 of 22' }).click();
     const box = await page.locator('.print-image-container').first().boundingBox();
     for (const name of ['Remove this image', 'Set as main image']) {
       const b = await page.getByRole('button', { name }).boundingBox();
@@ -108,7 +110,7 @@ test.describe('photos and carousel', () => {
     api.addAsset('LS1', { title: 'contrast' });
     await boot(page, { api });
     await nav(page, isMobile, /^LS1/);
-    await page.getByRole('button', { name: 'Show image 2 of 2' }).click();
+    await page.getByRole('button', { name: 'Show image 3 of 3' }).click();
     await expect(page.getByRole('img', { name: 'contrast' })).toBeVisible();
     const measured = await page.evaluate(() => {
       const fgOf = el => getComputedStyle(el).color;
@@ -216,7 +218,7 @@ test.describe('print, export and performance', () => {
     api.addAsset('LS2', { title: 'extra' });
     await boot(page, { api });
     await nav(page, isMobile, /^LS2/);
-    await expect(page.getByRole('button', { name: 'Show image 3 of 3' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Show image 4 of 4' })).toBeVisible();
     await page.emulateMedia({ media: 'print' });
     expect(await page.locator('main img:visible').count()).toBe(1);
     expect(await page.getByRole('button', { name: 'Add photos' }).isVisible()).toBe(false);
@@ -224,7 +226,7 @@ test.describe('print, export and performance', () => {
     expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
   });
 
-  test('FM-27 Excel export contains only the allocations and inventory sheets (same columns as before)', async ({ page }) => {
+  test('FM-27 Excel export keeps the legacy allocations and inventory sheets (same columns as before) after the new sheets', async ({ page }) => {
     await boot(page);
     const dl = page.waitForEvent('download');
     await page.getByRole('button', { name: 'Export Excel' }).click();
@@ -233,7 +235,10 @@ test.describe('print, export and performance', () => {
     const file = join(dir, 'plan.xlsx');
     await download.saveAs(file);
     const wb = execFileSync('unzip', ['-p', file, 'xl/workbook.xml']).toString();
-    expect([...wb.matchAll(/<sheet [^>]*name="([^"]+)"/g)].map(m => m[1])).toEqual(['Compartments', 'Inventory Status']);
+    expect([...wb.matchAll(/<sheet [^>]*name="([^"]+)"/g)].map(m => m[1])).toEqual([
+      'Compartment Inventory', 'Equipment Catalog', 'Compartment Summary', 'Bundles and Kits', 'Notes and Exceptions', 'Export Metadata',
+      'Compartments', 'Inventory Status',
+    ]);
     const shared = execFileSync('unzip', ['-p', file, 'xl/sharedStrings.xml']).toString();
     for (const h of ['Equipment Item', 'Total Qty', 'Placed', 'Remaining', 'Assigned To', 'Dimensions', 'Status']) expect(shared).toContain(h);
   });

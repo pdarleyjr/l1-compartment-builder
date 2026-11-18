@@ -5,7 +5,7 @@ import { equipmentIdForNameSync } from '../../shared/ids.js';
 import { assignedCounts, compartmentAssignments, effectiveInventory, emptyDocV2, migrateV1toV2, normalizeDoc, projectV1 } from '../../shared/planner.js';
 import { counterIds, FOG, IRONS, JACK, THERMAL, VSTRUT, v1Fixture, CELLAR, GRIPHOIST } from './fixtures.js';
 
-const V1_KEYS = ['allocations', 'bundles', 'customDimensions', 'customQtys', 'customTools', 'removedItems'];
+const V1_KEYS = ['allocations', 'bundles', 'customDimensions', 'customQtys', 'customTools', 'notes', 'removedItems', 'unverified'];
 
 describe('emptyDocV2', () => {
   test('all compartments × 15 empty slots, base ids, parity', () => {
@@ -34,7 +34,7 @@ describe('migrateV1toV2', () => {
     const { doc, report } = await migrateV1toV2(v1, { newId: counterIds() });
     const proj = projectV1(doc);
     expect(Object.keys(proj).sort()).toEqual(V1_KEYS);
-    expect(proj).toEqual(v1);
+    expect(proj).toEqual({ ...v1, notes: {}, unverified: {} });
     expect(report.warnings).toEqual([]);
   });
   test('does not mutate the input', async () => {
@@ -112,17 +112,17 @@ describe('migrateV1toV2', () => {
 });
 
 describe('projectV1', () => {
-  test('strips v2-only fields and tool extras, returns copies', async () => {
+  test('strips v2-only fields (equipmentId), keeps tool descriptions, returns copies', async () => {
     const { doc } = await migrateV1toV2(v1Fixture());
     doc.customTools[0].description = 'thermal imager';
     doc.customTools[0].equipmentId = 'eq_0000000000000000';
     const proj = projectV1(doc);
-    expect(proj.customTools[0]).toEqual({ name: THERMAL, qty: 2, dimensions: '6 × 4 × 3 in' });
+    expect(proj.customTools[0]).toEqual({ name: THERMAL, qty: 2, dimensions: '6 × 4 × 3 in', description: 'thermal imager' });
     proj.allocations.LS1[0] = 'changed';
     expect(doc.allocations.LS1[0]).toBe(FOG);
   });
   test('tolerates sparse docs', () => {
-    expect(projectV1({})).toEqual({ allocations: {}, customQtys: {}, customTools: [], bundles: {}, removedItems: [], customDimensions: {} });
+    expect(projectV1({})).toEqual({ allocations: {}, customQtys: {}, customTools: [], bundles: {}, removedItems: [], customDimensions: {}, notes: {}, unverified: {} });
   });
 });
 

@@ -12,7 +12,6 @@ const renameSlot = v => {
 
 const cleanTool = t => {
   const out = { ...t };
-  delete out.description;
   delete out.equipmentId;
   return out;
 };
@@ -29,6 +28,8 @@ export function projectV1(doc) {
     bundles: doc.bundles ?? {},
     removedItems: doc.removedItems ?? [],
     customDimensions: doc.customDimensions ?? {},
+    notes: doc.notes ?? {},
+    unverified: doc.unverified ?? {},
   });
 }
 
@@ -65,6 +66,8 @@ export async function migrateV1toV2(v1, ctx = {}) {
     bundles: isObj(src.bundles) ? clone(src.bundles) : {},
     equipmentIds: { ...baseEquipmentIds(), ...(isV2 && isObj(src.equipmentIds) ? src.equipmentIds : {}) },
     assignmentIds: isV2 && isObj(src.assignmentIds) ? clone(src.assignmentIds) : {},
+    notes: isObj(src.notes) ? clone(src.notes) : {},
+    unverified: isObj(src.unverified) ? clone(src.unverified) : {},
   };
   // Custom/unknown names: random ids (base names already hold their deterministic ids).
   const known = new Set(inventoryNames(doc));

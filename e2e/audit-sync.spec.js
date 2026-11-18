@@ -88,18 +88,20 @@ test('SD-02/03 a photo deleted on device A is gone on device B and is never resu
   const b = await openDevice(browser, api);
   await a.page.getByRole('button', { name: /^LS1/ }).click();
   await b.page.getByRole('button', { name: /^LS1/ }).click();
-  await expect(b.page.getByRole('button', { name: 'Show image 2 of 2' })).toBeVisible();
-  await a.page.getByRole('button', { name: 'Show image 2 of 2' }).click();
+  await expect(b.page.getByRole('button', { name: 'Show image 3 of 3' })).toBeVisible();
+  await a.page.getByRole('button', { name: 'Show image 3 of 3' }).click();
   a.page.once('dialog', d => d.accept());
   await a.page.getByRole('button', { name: 'Remove this image' }).click();
   await expect(a.page.getByRole('img', { name: 'x-photo' })).toHaveCount(0);
   await b.page.reload();
   await b.page.getByRole('button', { name: /^LS1/ }).click();
-  await expect(b.page.getByRole('img', { name: 'Compartment Photo' })).toBeVisible();
-  await expect(b.page.getByRole('button', { name: /Show image 2/ })).toHaveCount(0);
+  await expect(b.page.getByRole('img', { name: 'Loadout Rendering (2026-11-18)' })).toBeVisible();
+  await expect(b.page.getByRole('button', { name: 'Show image 2 of 2' })).toBeVisible();
+  await expect(b.page.getByRole('button', { name: /Show image 3/ })).toHaveCount(0);
   await a.page.reload();
   await a.page.getByRole('button', { name: /^LS1/ }).click();
-  await expect(a.page.getByRole('button', { name: /Show image 2/ })).toHaveCount(0);
+  await expect(a.page.getByRole('button', { name: 'Show image 2 of 2' })).toBeVisible();
+  await expect(a.page.getByRole('button', { name: /Show image 3/ })).toHaveCount(0);
 });
 
 test('SD-04 a main-image change on device A replaces the first image on device B', async ({ browser }) => {
@@ -107,13 +109,13 @@ test('SD-04 a main-image change on device A replaces the first image on device B
   const a = await openDevice(browser, api);
   const b = await openDevice(browser, api);
   await a.page.getByRole('button', { name: /^LS2/ }).click();
-  await a.page.getByRole('button', { name: 'Show image 2 of 2' }).click();
+  await a.page.getByRole('button', { name: 'Show image 3 of 3' }).click();
   await a.page.getByRole('button', { name: 'Set as main image' }).click();
   await expect.poll(() => api.mains.LS2?.ref).toBe('/images/LS2_rendering.webp');
   await b.page.reload();
   await b.page.getByRole('button', { name: /^LS2/ }).click();
   await expect(b.page.getByRole('img', { name: 'Rendering with Tools' })).toBeVisible();
-  await expect(b.page.getByRole('button', { name: 'Show image 1 of 2' })).toHaveAttribute('aria-current', 'true');
+  await expect(b.page.getByRole('button', { name: 'Show image 1 of 3' })).toHaveAttribute('aria-current', 'true');
   await expect(b.page.getByText('main image', { exact: true })).toBeVisible();
 });
 
@@ -251,8 +253,10 @@ test('SD-08 removing an inventory item prunes it from bundles', async ({ browser
   await page.getByRole('button', { name: 'Inventory Status', exact: true }).click();
   page.once('dialog', d => d.accept());
   await page.getByRole('button', { name: `Remove ${HOIST}`, exact: true }).click();
-  await expect.poll(() => api.view().allocations.LS1[0], { timeout: 5000 }).toBe('');
-  expect((api.view().bundles.LS1 ?? []).flatMap(b => b.slotIndices)).toEqual([1]);
+  // The removed item's slot is packed away: the remaining item moves up and the bundle follows it.
+  await expect.poll(() => api.view().allocations.LS1[0], { timeout: 5000 }).toBe(FOG);
+  expect(api.view().allocations.LS1[1]).toBe('');
+  expect((api.view().bundles.LS1 ?? []).flatMap(b => b.slotIndices)).toEqual([0]);
 });
 
 test('SD-05 (replaced) photos are never stored in localStorage; only the planner cache and queue are', async ({ browser }) => {
@@ -260,7 +264,7 @@ test('SD-05 (replaced) photos are never stored in localStorage; only the planner
   api.addAsset('LS1', { title: 'big-photo' });
   const { page } = await openDevice(browser, api);
   await page.getByRole('button', { name: /^LS1/ }).click();
-  await expect(page.getByRole('img', { name: 'big-photo' }).or(page.getByRole('button', { name: 'Show image 2 of 2' }))).toBeVisible();
+  await expect(page.getByRole('img', { name: 'big-photo' }).or(page.getByRole('button', { name: 'Show image 3 of 3' }))).toBeVisible();
   const keys = await page.evaluate(() => Object.keys(localStorage));
   expect(keys.filter(k => /upload|featured|image/i.test(k))).toEqual([]);
   expect(keys).toContain('l1-planner-sync-v5');

@@ -9,7 +9,9 @@ needs is same-origin under `/api` (Cloudflare Worker `l1-state-sync`, route
 
 - Eleven editable apparatus compartments and four apparatus overview screens
 - Searchable equipment assignment with inventory quantity enforcement
+- Clearing a slot moves the items below it up; moved items keep their identity
 - Bulk assignment, row expansion, equipment bundles, and full inventory CRUD
+- Placement Progress page: placed equipment by compartment and what is still to place
 - Revisioned, op-based planner sync (`src/lib/planner-sync.js`): edits are queued
   durably on the device, sent with retry/backoff, and merged by the server, so two
   people editing different compartments never overwrite each other. A status pill
@@ -18,7 +20,14 @@ needs is same-origin under `/api` (Cloudflare Worker `l1-state-sync`, route
 - Server-backed gallery and one approved main image per compartment, shown first on
   every device (`src/lib/gallery.js`); photos and AI renderings are created in the
   lazily loaded **AI Compartment Studio** (`src/studio/`)
-- Two-sheet Excel export and print/PDF layouts
+- Per-compartment notes (plain text, up to 2,000 characters) and a "Needs verification" flag with a
+  reason on any inventory item, both saved through the same op-based planner sync
+  (`docs/architecture/notes-verification-transfer.md`)
+- Excel export of the whole plan (Compartment Inventory, Equipment Catalog, Compartment Summary, Bundles and Kits,
+  Notes and Exceptions, Export Metadata, plus the legacy Compartments and Inventory Status sheets) and, from the same
+  snapshot, the `l1.checklist-transfer/1` JSON file that MBFD Hub imports into a checklist draft
+  (`scripts/export-manifest.mjs` builds both offline from a saved `GET /api/public/planner` response)
+- Print/PDF layouts
 - Responsive navigation and touch-first controls for phones, tablets, and
   desktop browsers
 
@@ -45,12 +54,20 @@ url, thumbUrl, title, provenance}]}`.
 ## Verification
 
 ```powershell
-npm audit --audit-level=low
+npm run audit
 npm run lint
 npm run test:coverage
 npm run build
 npm run test:e2e
 ```
+
+`npm run audit` is `npm audit` at level low minus the temporary, dev-only exceptions in `audit-exceptions.json`
+(none at the moment; the picomatch GHSA-fc5q-39xc-vjpf exception was removed on 2026-11-18 once npm audit stopped
+reporting it). It fails on any other advisory, when an excepted
+advisory reaches a production dependency, when a fixed version is published, or after the exception expires.
+
+CI runs on GitHub-hosted `ubuntu-latest` (Ubuntu 26.04) with `PLAYWRIGHT_HOST_PLATFORM_OVERRIDE=ubuntu24.04-x64`, because
+Playwright 1.59 does not list Ubuntu 26.04 yet; set the same variable when installing browsers on a 26.04 machine.
 
 The end-to-end suite serves every `/api` request from an in-memory implementation
 of the API contract (`e2e/helpers/fake-api.js`: session with a signed-in/out switch,
@@ -76,6 +93,8 @@ npm run deploy:worker
 npm run deploy:pages
 ```
 
+Deploy the Worker before Pages whenever the planner op list changes, so the new client never sends an op the
+running Worker does not know (old clients keep working against the new Worker).
 The deployed commit is available in the UI sidebar and at `/version.json`.
 Cloudflare Pages retains prior deployments for rollback. Never place API tokens
 or credentials in this repository.

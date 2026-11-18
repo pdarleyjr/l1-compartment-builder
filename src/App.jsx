@@ -8,10 +8,11 @@ import CompartmentPanel from './components/CompartmentPanel.jsx';
 import ErrorBoundary from './components/ErrorBoundary.jsx';
 import InventoryPanel from './components/InventoryPanel.jsx';
 import OverviewPanel from './components/OverviewPanel.jsx';
+import ProgressPanel from './components/ProgressPanel.jsx';
 import Sidebar, { NavDrawer } from './components/Sidebar.jsx';
 import SyncStatusPill from './components/SyncStatusPill.jsx';
 import MigrationAction from './components/MigrationAction.jsx';
-import exportExcel from './components/exportExcel.js';
+import useExportFlow from './components/useExportFlow.jsx';
 import usePlan from './components/usePlan.js';
 import usePlanActions from './components/usePlanActions.js';
 
@@ -71,7 +72,8 @@ export default function App() {
   const handleReset = () => {
     if (window.confirm('Clear ALL compartment assignments? This cannot be undone.')) actions.reset();
   };
-  const handleExport = () => exportExcel(view.allocations, plan);
+  const exporter = useExportFlow(sync);
+  const handleExport = exporter.start;
   const closeStudio = useCallback(() => { setStudio(null); refreshGalleries(); }, []);
   const counts = Object.fromEntries(COMPARTMENTS.map(c => [c.id, view.allocations[c.id].filter(Boolean).length]));
 
@@ -158,6 +160,7 @@ export default function App() {
         {activeTab === 'inventory' && (
           <InventoryPanel plan={plan} actions={actions} readOnly={readOnly} onExport={handleExport} />
         )}
+        {activeTab === 'progress' && <ProgressPanel view={view} plan={plan} onNav={nav} />}
         {activeOv && (
           <OverviewPanel ov={activeOv} allocations={view.allocations} mainImages={mainImages} onExport={handleExport} />
         )}
@@ -167,12 +170,14 @@ export default function App() {
             comp={activeComp} allocations={view.allocations} bundles={view.bundles}
             plan={plan} actions={actions} readOnly={readOnly} onExport={handleExport}
             session={session} signIn={signIn} plannerRevision={sync.revision}
+            notes={view.notes} serverNotes={sync.doc?.notes} sync={{ status: sync.status, pending: sync.pending, hasDoc: !!sync.doc }}
             mainImage={mainImages[activeComp.id]}
             studioAvailable={studioAvailable}
             onOpenStudio={(step) => setStudio({ compId: activeComp.id, step })}
           />
         )}
       </main>
+      {exporter.ui}
 
       {studio && studioAvailable && (
         <StudioLayer

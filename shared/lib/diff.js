@@ -71,9 +71,10 @@ const keyedDiff = (baseMap, nextMap, make) => {
 /**
  * Diff two planner states into ops. `base`/`next` may be v1 views or v2 docs. `opts.renames = [{from,to}]` emits
  * renameEquipment (applied to a copy of base first) so the rename shows up as one op, not remove + add.
- * Op order keeps sequential application valid: renames → custom tools/qty up → slot growth → slot changes →
- * slot shrink → removals → dimensions → bundles.
- * @param {object} base @param {object} next @param {{renames?:{from:string,to:string}[]}} [opts]
+ * `opts.slotRemovals = [{comp,index,expect}]` emits removeSlot the same way (view spliced the same way → no further ops).
+ * Op order keeps sequential application valid: renames → slot removals → item removals → custom tools/qty up → slot
+ * growth → slot changes → slot shrink → dimensions → notes → unverified → bundles.
+ * @param {object} base @param {object} next @param {{renames?:{from:string,to:string}[], slotRemovals?:{comp:string,index:number,expect:string}[]}} [opts]
  * @returns {object[]}
  */
 export function diffDocs(base, next, opts = {}) {
@@ -85,6 +86,23 @@ export function diffDocs(base, next, opts = {}) {
     const res = applyOps(from, [op], { newId: p => `${p}_${'0'.repeat(16)}` });
     if (res.applied.length) { from = res.doc; ops.push(op); }
   }
+  for (const r of opts.slotRemovals ?? []) {
+    const op = { op: 'removeSlot', comp: r.comp, index: r.index, expect: r.expect };
+    const res = applyOps(from, [op], { newId: p => `${p}_${'0'.repeat(16)}` });
+    if (res.applied.length) { from = res.doc; ops.push(op); }
+  }
+  // Item removals go first and are applied to `from`, so a view that packed the slots shows no setSlot churn.
+  const removalOps = [];
+  const nextToolNames = new Set(to.customTools.map(t => t.name));
+  const candidates = [
+    ...to.removedItems.filter(n => !from.removedItems.includes(n)).map(name => ({ op: 'setRemoved', name, removed: true })),
+    ...from.customTools.filter(t => !nextToolNames.has(t.name)).map(t => ({ op: 'removeCustomTool', name: t.name })),
+  ];
+  for (const op of candidates) {
+    const res = applyOps(from, [op], { newId: p => `${p}_${'0'.repeat(16)}` });
+    if (res.applied.length) { from = res.doc; removalOps.push(op); }
+  }
+  ops.push(...removalOps);
   const qtyOf = name => effectiveInventory(to).find(r => r.name === name)?.qty ?? 0;
 
   const toolOps = [];
@@ -119,5 +137,13 @@ export function diffDocs(base, next, opts = {}) {
   }
   const dimOps = keyedDiff(from.customDimensions, to.customDimensions, (name, value) => ({ op: 'setDimension', name, value }));
 
-  return [...ops, ...unremove, ...toolOps, ...qtyOps, ...slots.grow, ...slots.sets, ...slots.shrink, ...remove, ...delTools, ...dimOps, ...bundleOps];
+  const noteOps = [];
+  for (const compId of new Set([...Object.keys(from.notes), ...Object.keys(to.notes)])) {
+    const was = from.notes[compId]?.text ?? '';
+    const now = to.notes[compId]?.text ?? '';
+    if (was !== now) noteOps.push({ op: 'setNote', comp: compId, text: now, expect: was });
+  }
+  const unverifiedOps = keyedDiff(from.unverified, to.unverified, (name, reason) => ({ op: 'setUnverified', name, reason }));
+
+  return [...ops, ...unremove, ...toolOps, ...qtyOps, ...slots.grow, ...slots.sets, ...slots.shrink, ...remove, ...delTools, ...dimOps, ...noteOps, ...unverifiedOps, ...bundleOps];
 }

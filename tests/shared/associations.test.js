@@ -119,7 +119,7 @@ describe('planAssociation', () => {
     const applied = applyOps(doc, r.plannerOps, ctx);
     expect(applied.conflicts).toEqual([]);
     expect(applied.doc.equipmentIds['Pry Bar']).toBe(eq);
-    expect(projectV1(applied.doc).customTools.at(-1)).toEqual({ name: 'Pry Bar', qty: 3, dimensions: '30 in' });
+    expect(projectV1(applied.doc).customTools.at(-1)).toEqual({ name: 'Pry Bar', qty: 3, dimensions: '30 in', description: 'steel bar' });
   });
   test('new tool defaults qty to the selected quantity; duplicate names and bad input are errors', () => {
     expect(planAssociation(doc, 'LS3', [{ quantity: 2, newTool: { name: 'Gizmo' } }], ctx).plannerOps[0].tool.qty).toBe(2);
