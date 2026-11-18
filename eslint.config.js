@@ -6,7 +6,7 @@ export default [
   { ignores: ['dist/**', 'coverage/**', 'playwright-report/**', 'test-results/**'] },
   js.configs.recommended,
   {
-    files: ['src/**/*.{js,jsx}', 'tests/**/*.js', 'e2e/**/*.js'],
+    files: ['src/**/*.{js,jsx}', 'tests/**/*.js', 'e2e/**/*.js', 'scripts/**/*.mjs'],
     languageOptions: {
       ecmaVersion: 'latest',
       globals: { ...globals.browser, ...globals.node },

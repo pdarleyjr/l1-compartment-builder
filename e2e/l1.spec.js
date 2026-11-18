@@ -227,7 +227,7 @@ test('Excel export downloads a workbook', async ({ page }) => {
   const downloadPromise = page.waitForEvent('download');
   await page.getByRole('button', { name: 'Export Excel' }).click();
   const download = await downloadPromise;
-  expect(download.suggestedFilename()).toBe('L1_Compartment_Plan.xlsx');
+  expect(download.suggestedFilename()).toMatch(/^L1 Mid-Mount - Compartment Plan - \d{4}-\d{2}-\d{2} - rev\d+\.xlsx$/);
 });
 
 // ─── API integration (sign-in, read-only, server gallery, Studio, error boundary) ─────────────────────────────────
