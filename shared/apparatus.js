@@ -256,7 +256,10 @@ export const COMPARTMENTS = [
     { src: '/images/LS4_loadout_2026-11-18.webp', title: 'Loadout Rendering (2026-11-18)' },
     { src: '/images/LS4.webp', title: 'Compartment Photo' },
   ]},
-  { id: 'RS1', side: 'Right', images: [{ src: '/images/RS1.webp', title: 'Compartment Photo' }] },
+  { id: 'RS1', side: 'Right', images: [
+    { src: '/images/RS1_loadout_2026-11-18.webp', title: 'Loadout Rendering (2026-11-18)' },
+    { src: '/images/RS1.webp', title: 'Compartment Photo' },
+  ]},
   { id: 'RS2', side: 'Right', images: [
     { src: '/images/RS2_loadout_2026-11-18.webp', title: 'Loadout Rendering (2026-11-18)' },
     { src: '/images/RS2.webp', title: 'Compartment Photo' },
