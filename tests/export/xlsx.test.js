@@ -6,7 +6,7 @@ import writeXlsxFile from 'write-excel-file/node';
 import readXlsxFile from 'read-excel-file/node';
 import { buildSnapshot } from '../../src/lib/export/snapshot.js';
 import { buildManifest } from '../../src/lib/export/manifest.js';
-import { PROTECTED_TEXT, buildWorkbookSheets } from '../../src/lib/export/workbook.js';
+import { buildWorkbookSheets } from '../../src/lib/export/workbook.js';
 import { A, B, FIXED, baseDoc, emptyAlloc, unzip } from './helpers.js';
 
 async function render(docOver) {
@@ -66,7 +66,7 @@ describe('real xlsx output', () => {
     expect(meta['Units by compartment: LS1']).toBe(2);
     const summary = data['Compartment Summary'].slice(1);
     expect(summary).toHaveLength(11);
-    expect(summary.find(r => r[2] === 'RS3')[7]).toBe(PROTECTED_TEXT);
+    expect(summary.find(r => r[2] === 'RS3')[7]).toBe('No');
     expect(data['Bundles and Kits'].slice(1).map(r => [r[2], r[5]])).toEqual([['Kit', 1], ['Kit', 3]]);
     expect(data['Notes and Exceptions'].slice(1).some(r => r[0] === 'Compartment note' && r[3] === 'A note')).toBe(true);
   });

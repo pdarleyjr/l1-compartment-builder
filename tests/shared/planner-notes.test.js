@@ -13,8 +13,8 @@ const apply = (ops, d = doc) => applyOps(d, ops, ctx);
 const note = (comp, text, expect = '') => ({ op: 'setNote', comp, text, expect });
 
 describe('constants', () => {
-  test('RS3 is locked; limits', () => {
-    expect(NOTES_LOCKED_COMPARTMENTS).toEqual(['RS3']);
+  test('no compartment is locked; limits', () => {
+    expect(NOTES_LOCKED_COMPARTMENTS).toEqual([]);
     expect(NOTE_LIMITS).toEqual({ textMax: 2000, reasonMax: 300 });
   });
 });
@@ -60,11 +60,12 @@ describe('setNote', () => {
     expect(same.applied).toEqual([0]);
     expect(same.doc.notes.LS1.updatedAt).toBe(1000);
   });
-  test('RS3 is locked (INVALID), nothing written', () => {
+  test('RS3 takes a note like any other compartment, without touching its equipment', () => {
     const r = apply([note('RS3', 'x')]);
-    expect(r.conflicts).toEqual([{ index: 0, reason: 'INVALID', message: 'notes are locked for this compartment' }]);
-    expect(r.doc.notes.RS3).toBeUndefined();
-    expect(r.doc).toEqual(normalizeDoc(doc).doc);
+    expect(r.conflicts).toEqual([]);
+    expect(r.doc.notes.RS3).toEqual({ text: 'x', updatedAt: 1000 });
+    const before = normalizeDoc(doc).doc;
+    for (const key of ['allocations', 'assignmentIds', 'bundles']) expect(r.doc[key].RS3).toEqual(before[key].RS3);
   });
   test('unknown compartment → NOT_FOUND', () => {
     expect(apply([note('ZZ9', 'x')]).conflicts[0].reason).toBe('NOT_FOUND');
@@ -175,13 +176,12 @@ describe('RS3 invariant', () => {
       { op: 'setCustomQty', name: JACK, qty: 4 }, { op: 'setDimension', name: JACK, value: '1 x 1' },
       { op: 'upsertCustomTool', tool: { name: 'Extra', qty: 1 } }, { op: 'setUnverified', name: 'Extra', reason: 'r' },
       { op: 'renameEquipment', from: 'Extra', to: 'Extra2' }, { op: 'removeCustomTool', name: 'Extra2' },
-      { op: 'setRemoved', name: JACK, removed: true }, note('RS3', 'sneaky'));
+      { op: 'setRemoved', name: JACK, removed: true });
     const r = apply(ops);
     expect(r.doc.allocations.RS3).toEqual(before.allocations.RS3);
     expect(r.doc.assignmentIds.RS3).toEqual(before.assignmentIds.RS3);
     expect(r.doc.bundles.RS3).toEqual(before.bundles.RS3);
     expect(r.doc.notes.RS3).toBeUndefined();
-    expect(r.conflicts.filter(c => c.reason === 'INVALID').length).toBeGreaterThan(0);
   });
 });
 

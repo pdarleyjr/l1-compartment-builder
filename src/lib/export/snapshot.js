@@ -2,13 +2,12 @@
 // Pure ESM (no DOM) so the browser, the Vitest suite and scripts/export-manifest.mjs share it.
 import { COMPARTMENTS, COMPARTMENT_SPECS, COMP_LABEL, DIMENSIONS, INVENTORY_BY_NAME, MASTER_INVENTORY, SLOTS_PER_COMPARTMENT, VISUAL_DESCRIPTIONS } from '../../../shared/apparatus.js';
 import { COMPARTMENT_IDS } from '../../../shared/contracts.js';
-import * as contracts from '../../../shared/contracts.js';
+import { NOTES_LOCKED_COMPARTMENTS } from '../../../shared/contracts.js';
 import { equipmentIdForNameSync } from '../../../shared/ids.js';
 import { baseEquipmentIds } from '../../../shared/lib/doc.js';
 
-// Frozen compartments (owner directive, see docs/architecture/notes-verification-transfer.md §1). The shared contract
-// owns the list; until it exports NOTES_LOCKED_COMPARTMENTS the contract value ['RS3'] is used.
-export const LOCKED_COMPARTMENTS = Object.freeze([...(contracts['NOTES_LOCKED_COMPARTMENTS'] ?? ['RS3'])]);
+// Compartments reported as "protected" (notes locked); see docs/architecture/notes-verification-transfer.md §1.
+export const LOCKED_COMPARTMENTS = NOTES_LOCKED_COMPARTMENTS;
 
 const isObj = v => v !== null && typeof v === 'object' && !Array.isArray(v);
 const str = v => (typeof v === 'string' ? v : '');

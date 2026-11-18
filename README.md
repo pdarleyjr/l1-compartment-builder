@@ -18,7 +18,7 @@ needs is same-origin under `/api` (Cloudflare Worker `l1-state-sync`, route
 - Server-backed gallery and one approved main image per compartment, shown first on
   every device (`src/lib/gallery.js`); photos and AI renderings are created in the
   lazily loaded **AI Compartment Studio** (`src/studio/`)
-- Per-compartment notes (plain text, up to 2,000 characters; RS3 is locked) and a "Needs verification" flag with a
+- Per-compartment notes (plain text, up to 2,000 characters) and a "Needs verification" flag with a
   reason on any inventory item, both saved through the same op-based planner sync
   (`docs/architecture/notes-verification-transfer.md`)
 - Excel export of the whole plan (Compartment Inventory, Equipment Catalog, Compartment Summary, Bundles and Kits,

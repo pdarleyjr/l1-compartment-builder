@@ -27,7 +27,7 @@ describe('manifest structure', () => {
     expect(verifyManifest(m)).toEqual({ ok: true, errors: [] });
   });
 
-  it('groups repeated items per compartment and marks RS3 protected with lines equal to its slots', () => {
+  it('groups repeated items per compartment; no compartment is protected; RS3 lines equal its slots', () => {
     const allocations = emptyAlloc();
     allocations.LS1[0] = A; allocations.LS1[3] = B; allocations.LS1[5] = A;
     allocations.RS3[0] = A; allocations.RS3[1] = B; allocations.RS3[2] = B;
@@ -40,8 +40,8 @@ describe('manifest structure', () => {
     expect(ls1.items[0].lineKey).toBe(`LS1:${ls1.items[0].equipmentId}`);
     expect(ls1.side).toBe('Left');
     const rs3 = comp(m, 'RS3');
-    expect(rs3.protected).toBe(true);
-    expect(m.compartments.filter(c => c.protected).map(c => c.id)).toEqual(['RS3']);
+    expect(rs3.protected).toBe(false);
+    expect(m.compartments.filter(c => c.protected)).toEqual([]);
     expect(rs3.items.map(l => [l.name, l.slots])).toEqual([[A, [0]], [B, [1, 2]]]);
     expect(rs3.items.reduce((n, l) => n + l.quantity, 0)).toBe(3);
     expect(m.totals.lines).toBe(4);

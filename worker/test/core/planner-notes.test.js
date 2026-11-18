@@ -29,15 +29,14 @@ describe('planner notes and verification (real shared engine)', () => {
     expect(read.doc.unverified).toEqual({ [FOG]: 'Model unconfirmed' });
   });
 
-  it('RS3 setNote is a conflict and writes nothing', async () => {
+  it('RS3 takes a note like any other compartment', async () => {
     const env = await migratedEnv();
-    const res = await post(env, { baseRevision: 1, clientOpId: 'op_notes002', ops: [{ op: 'setNote', comp: 'RS3', text: 'nope', expect: '' }] });
+    const res = await post(env, { baseRevision: 1, clientOpId: 'op_notes002', ops: [{ op: 'setNote', comp: 'RS3', text: 'RS3 note', expect: '' }] });
     const body = await res.json();
-    expect(body.applied).toEqual([]);
-    expect(body.conflicts[0]).toMatchObject({ index: 0, reason: 'INVALID' });
-    expect(body.revision).toBe(1);
+    expect(body.applied).toEqual([0]);
+    expect(body.conflicts).toEqual([]);
     const read = await (await worker.fetch(request('GET', '/api/public/planner'), env)).json();
-    expect(read.doc.notes?.RS3).toBeUndefined();
+    expect(read.doc.notes.RS3.text).toBe('RS3 note');
   });
 
   it('a stale expect returns PRECONDITION with the current text', async () => {

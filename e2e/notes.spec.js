@@ -150,16 +150,17 @@ test('markup in a note renders literally', async ({ browser }) => {
   expect(dialogs).toEqual([]);
 });
 
-test('RS3 has no Notes section and the op is refused', async ({ browser }) => {
+test('RS3 has a Notes section like every other compartment', async ({ browser }) => {
   const api = new FakeApi();
   const a = await openDevice(browser, api);
   await goTo(a.page, 'RS3');
   await expect(a.page.getByRole('heading', { name: 'Compartment RS3', exact: true })).toBeVisible();
-  await expect(a.page.getByRole('heading', { name: 'Notes' })).toHaveCount(0);
-  await expect(a.page.getByRole('button', { name: /Add note/ })).toHaveCount(0);
-  const res = api.applyDirect([{ op: 'setNote', comp: 'RS3', text: 'x', expect: '' }]);
-  expect(res.conflicts[0].reason).toBe('INVALID');
-  expect(api.doc.notes.RS3).toBeUndefined();
+  const before = structuredClone(api.doc.allocations.RS3);
+  await a.page.getByRole('button', { name: /^Add note/ }).click();
+  await a.page.getByRole('textbox', { name: /Notes for RS3/ }).fill('RS3 hose packs stay bundled');
+  await a.page.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect.poll(() => api.doc.notes?.RS3?.text).toBe('RS3 hose packs stay bundled');
+  expect(api.doc.allocations.RS3).toEqual(before);
 });
 
 test('notes controls are at least 44px and pass axe', async ({ browser }) => {

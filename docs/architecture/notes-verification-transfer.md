@@ -16,10 +16,9 @@ unverified: { [equipmentName]: string }                         // item needs ve
   text, never HTML; `\n` and `\t` allowed, other C0 control characters rejected). An empty text deletes the entry.
   `updatedAt` is set by the op engine from `ctx.now` (server clock on the Worker). No author email is stored in the
   public doc; the audit log already records the actor of every planner write.
-* `NOTES_LOCKED_COMPARTMENTS = ['RS3']` (`shared/contracts.js`): RS3 is frozen by owner directive (2026-11-18). The op
-  engine rejects `setNote` for a locked compartment (`INVALID`), the UI shows no notes editor there, and nothing is
-  ever written under `notes.RS3`. Changing the list is a reviewed code change (justified not editable: it is a
-  protection control, not routine content).
+* Every compartment, RS3 included, has notes. `NOTES_LOCKED_COMPARTMENTS` (`shared/contracts.js`) is empty; a
+  compartment listed there would get no notes editor, `setNote` would be refused (`INVALID`) and the export would mark
+  it `protected`.
 * `unverified[name]`: reason 0–300 characters. Presence = "needs verification" (identity, model, size or itemization
   not confirmed); absence = verified. `renameEquipment` moves the key, `removeCustomTool` and `setRemoved{removed:true}`
   delete it.
@@ -57,7 +56,7 @@ importer; the workbook is for people.
   "compartments": [                                // all 11, in COMPARTMENT_IDS order
     {
       "id": "LS1", "label": "LS1", "side": "Left", "order": 2,
-      "protected": false,                          // true for NOTES_LOCKED_COMPARTMENTS (RS3)
+      "protected": false,                          // true only for NOTES_LOCKED_COMPARTMENTS (none today)
       "spec": "<COMPARTMENT_SPECS text>",
       "note": { "text": "…", "updatedAt": 1763478245000 } | null,
       "items": [                                   // one line per equipment in this compartment, first-slot order
@@ -94,7 +93,7 @@ previews it but refuses to save it ("Export the last saved team plan to import")
 ## 4. Workbook (`L1 Mid-Mount - Compartment Plan - <YYYY-MM-DD> - rev<N>.xlsx`)
 
 Sheets, in order: **Compartment Inventory** (one row per manifest line, visual compartment order), **Equipment
-Catalog**, **Compartment Summary** (all 11, RS3 marked protected), **Bundles and Kits** (one row per bundle member),
+Catalog**, **Compartment Summary** (all 11), **Bundles and Kits** (one row per bundle member),
 **Notes and Exceptions**, **Export Metadata** (schema, build, revision, UTC time, sync state, snapshot sha256, counting
 rule, totals), then the legacy **Compartments** and **Inventory Status** sheets unchanged for existing users. Every
 text value (including names that begin with `= + - @`) is written as a typed `String` cell, never a formula; the
