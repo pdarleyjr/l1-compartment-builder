@@ -63,12 +63,18 @@ describe('compartmentGeometry', () => {
     expect(compartmentGeometry('LS2').orientation).toBe('square');
     expect(compartmentGeometry('RS5').orientation).toBe('portrait');
   });
-  test('features and zones: LS2/RS2 include upper/middle/lower', () => {
-    for (const id of ['LS2', 'RS2']) {
-      const g = compartmentGeometry(id);
-      expect(g.zones).toEqual(expect.arrayContaining(['upper_shelf', 'middle_shelf', 'lower_tray', 'pull_out_tray']));
-      expect(g.features).toEqual(expect.arrayContaining(['Pull-Out Tilt Shelf', 'Pull-Out Tray', 'Fixed Shelf']));
-    }
+  test('features and zones follow the 2026-11-18 loadout (LS2 shelving removed, RS2 middle shelf removed)', () => {
+    const ls2 = compartmentGeometry('LS2');
+    expect(ls2.zones).toEqual(expect.arrayContaining(['lower_tray', 'pull_out_tray']));
+    expect(ls2.zones).not.toContain('upper_shelf');
+    expect(ls2.zones).not.toContain('middle_shelf');
+    expect(ls2.features).toEqual(['Pull-Out Tray']);
+    const rs2 = compartmentGeometry('RS2');
+    expect(rs2.zones).toEqual(expect.arrayContaining(['upper_shelf', 'lower_tray', 'pull_out_tray']));
+    expect(rs2.zones).not.toContain('middle_shelf');
+    expect(rs2.features).toEqual(expect.arrayContaining(['Pull-Out Tilt Shelf', 'Pull-Out Tray']));
+    expect(rs2.features).not.toContain('Fixed Shelf');
+    for (const id of ['LS2', 'RS2']) expect(compartmentGeometry(id).dimensions.heightIn).toBe(44);
     expect(compartmentGeometry('LS4').features).toContain('Inverter (upper-left corner)');
     expect(compartmentGeometry('RS4').features).toContain('Exhaust below compartment');
     expect(compartmentGeometry('RS3').features).toContain('Tires below compartment');

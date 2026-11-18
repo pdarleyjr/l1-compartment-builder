@@ -65,8 +65,9 @@ importer; the workbook is for people.
           "lineKey": "LS1:eq_3f…",                 // `${compId}:${equipmentId}` — stable across renames
           "equipmentId": "eq_3f…", "name": "DeWalt DCPS612AG2 K-Saw", "quantity": 1,
           "slots": [0], "assignmentIds": ["as_…"],
-          "bundle": { "id": "…", "name": "…" } | null,
-          "custom": false, "description": "", "dimensions": "…",
+          "bundle": { "id": "…", "name": "…" } | null,   // bundle of the first slot (display)
+          "bundles": [ { "id": "…", "name": "…", "slots": [0] } ], // every bundle any of the line's slots is in
+          "custom": false, "description": "", "dimensions": "…",   // description = custom tool description ('' for base)
           "verification": { "status": "verified" | "needs_verification", "reason": "" }
         }
       ]
@@ -81,10 +82,14 @@ importer; the workbook is for people.
 }
 ```
 
-Rules: integers are JSON numbers; names are exact planner names (no trimming or case change); a bundle line is
-reported on each of its members' lines (members are never merged); empty compartments are present with `items: []`
+Rules: integers are JSON numbers (`note.updatedAt` is epoch milliseconds, a number); names are exact planner names
+(no trimming or case change); there is exactly one line per (compartment, equipment), so `lineKey` is unique, and a line
+whose slots sit in several bundles (RS3's two Highrise Packs) lists each of them in `bundles` with its slots, so no
+bundle membership is lost; empty compartments are present with `items: []`
 and one `empty_compartment` exception; `needs_verification` lines are exceptions too. Consumers must refuse an unknown
 `schema`, verify `snapshotSha256`, and treat `needs_verification` lines as blockers for publishing a complete checklist.
+A `syncState: "local_changes"` export may carry provisional equipment ids for items created on that device; MBFD Hub
+previews it but refuses to save it ("Export the last saved team plan to import").
 
 ## 4. Workbook (`L1 Mid-Mount - Compartment Plan - <YYYY-MM-DD> - rev<N>.xlsx`)
 

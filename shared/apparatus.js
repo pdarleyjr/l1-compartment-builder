@@ -237,17 +237,33 @@ export const CONSOLIDATION_RENAMES = {
 
 export const COMPARTMENTS = [
   { id: 'CabRearZone', label: 'Rear Zone', side: 'Cab', images: [{ src: '/images/CabRearZone.webp', title: 'Compartment Photo' }] },
-  { id: 'LS1', side: 'Left',  images: [{ src: '/images/LS1.webp', title: 'Compartment Photo' }] },
+  { id: 'LS1', side: 'Left',  images: [
+    { src: '/images/LS1_loadout_2026-11-18.webp', title: 'Loadout Rendering (2026-11-18)' },
+    { src: '/images/LS1.webp', title: 'Compartment Photo' },
+  ]},
   { id: 'LS2', side: 'Left',  images: [
+    { src: '/images/LS2_loadout_2026-11-18.webp', title: 'Loadout Rendering (2026-11-18)' },
     { src: '/images/LS2.webp',            title: 'Compartment Photo'    },
     { src: '/images/LS2_rendering.webp',  title: 'Rendering with Tools' },
   ]},
-  { id: 'LS3', side: 'Left',  images: [{ src: '/images/LS3.webp', title: 'Compartment Photo' }] },
-  { id: 'LS4', side: 'Left',  images: [{ src: '/images/LS4.webp', title: 'Compartment Photo' }] },
+  { id: 'LS3', side: 'Left',  images: [
+    { src: '/images/LS3_loadout_2026-11-18.webp', title: 'Loadout Rendering (2026-11-18)' },
+    { src: '/images/LS3.webp', title: 'Compartment Photo' },
+  ]},
+  { id: 'LS4', side: 'Left',  images: [
+    { src: '/images/LS4_loadout_2026-11-18.webp', title: 'Loadout Rendering (2026-11-18)' },
+    { src: '/images/LS4.webp', title: 'Compartment Photo' },
+  ]},
   { id: 'RS1', side: 'Right', images: [{ src: '/images/RS1.webp', title: 'Compartment Photo' }] },
-  { id: 'RS2', side: 'Right', images: [{ src: '/images/RS2.webp', title: 'Compartment Photo' }] },
+  { id: 'RS2', side: 'Right', images: [
+    { src: '/images/RS2_loadout_2026-11-18.webp', title: 'Loadout Rendering (2026-11-18)' },
+    { src: '/images/RS2.webp', title: 'Compartment Photo' },
+  ]},
   { id: 'RS3', side: 'Right', images: [{ src: '/images/RS3.webp', title: 'Compartment Photo' }] },
-  { id: 'RS4', side: 'Right', images: [{ src: '/images/RS4.webp', title: 'Compartment Photo' }] },
+  { id: 'RS4', side: 'Right', images: [
+    { src: '/images/RS4_loadout_2026-11-18.webp', title: 'Loadout Rendering (2026-11-18)' },
+    { src: '/images/RS4.webp', title: 'Compartment Photo' },
+  ]},
   { id: 'RS5', side: 'Right', images: [{ src: '/images/RS5.webp', title: 'Compartment Photo' }] },
   { id: 'RR1', label: 'Rear', side: 'Rear',  images: [{ src: '/images/RR1.webp', title: 'Compartment Photo' }] },
 ];
@@ -265,11 +281,11 @@ export const COMP_LABEL = Object.fromEntries(COMPARTMENTS.map(c => [c.id, c.labe
 // ─── Compartment physical specs — exact measurements from apparatus diagrams ──
 export const COMPARTMENT_SPECS = {
   LS1: 'Left Side 1 (LS1): Forward lower compartment, left side of Pierce apparatus. Overall compartment: 38" H × 17 3/4" W × 27" D. Door opening: 38" H × 15" W. Top shelf: 24" D × 17" W × 18" H. Lower open bay: 20" H. Two-zone vertical layout.',
-  LS2: 'Left Side 2 (LS2): Large main compartment, left side of Pierce apparatus. Overall height: 44" H. Pull-Out Tilt Shelf (upper): 23 3/4" D × 34 1/4" W. Fixed Shelf (middle): 40" W. Pull-Out Tray (lower): 26" D × 37" W. Full three-tier vertical layout. Primary rescue tool bay.',
+  LS2: 'Left Side 2 (LS2): Large main compartment, left side of Pierce apparatus. Overall height: 44" H. Upper and middle shelving removed for the 2026-11-18 loadout. Pull-Out Tray (lower): 26" D × 37" W carrying a Lazy Susan rescue tool mount; PAC Mount tool board on the right wall. Primary rescue tool bay.',
   LS3: 'Left Side 3 (LS3): Wide horizontal upper compartment, left side. Overall: 80" W × 16 3/8" H × 27" D. Left section: 22" W × 27" D with fixed shelf 26 1/2" W × 23" D (16" H). Right section: 55" W × 27" D (55" fixed width interior). Tilt/pull-out tray: 23 1/2" H × 52" W. Very wide shallow compartment spanning across the left side.',
   LS4: 'Left Side 4 (LS4): Rear upper compartment, left side. Overall: 20" H tall. Door opening: 22" H × 26 1/2" W. Pull-Out Tray: 26" D × 25" W. Inverter installed in upper-left corner. Shallow horizontal bay.',
   RS1: 'Right Side 1 (RS1): Forward lower compartment, right side of Pierce apparatus. Overall compartment: 38" H × 17 3/4" W × 27" D. Door opening: 38" H × 15" W. Top shelf: 24" D × 17" W × 18" H. Lower open bay: 20" H. Two-zone vertical layout.',
-  RS2: 'Right Side 2 (RS2): Large main compartment, right side of Pierce apparatus. Overall height: 44" H. Pull-Out Tilt Shelf (upper): 23 3/4" D × 34 1/4" W. Fixed Shelf (middle): 40" W. Pull-Out Tray (lower): 26" D × 37" W. Full three-tier vertical layout.',
+  RS2: 'Right Side 2 (RS2): Large main compartment, right side of Pierce apparatus. Overall height: 44" H. Pull-Out Tilt Shelf (upper, water appliances): 23 3/4" D × 34 1/4" W. Middle shelf removed for the 2026-11-18 loadout. Pull-Out Tray (lower): 26" D × 37" W. Two-tier vertical layout.',
   RS3: 'Right Side 3 (RS3): Wide horizontal compartment, right side. Fixed tray: 15" D × 56" W × 16" H total interior height. Very wide and shallow. Note: tires located directly below this compartment.',
   RS4: 'Right Side 4 (RS4): Rear lower compartment, right side. Overall specs: 20" H × 25" W × 26 3/4" D. Fixed shelf in upper half. Pull-Out Tray in lower half. Note: exhaust located below this compartment.',
   RS5: 'Right Side 5 (RS5): Rear tall narrow compartment, right side. Overall (inside): 9" D × 29 1/2" H × 17" W. Door opening: 15 1/2" W × 29 1/2" H. Fixed shelf present. Very shallow compartment — only 9 inches deep.',

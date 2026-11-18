@@ -18,7 +18,14 @@ needs is same-origin under `/api` (Cloudflare Worker `l1-state-sync`, route
 - Server-backed gallery and one approved main image per compartment, shown first on
   every device (`src/lib/gallery.js`); photos and AI renderings are created in the
   lazily loaded **AI Compartment Studio** (`src/studio/`)
-- Two-sheet Excel export and print/PDF layouts
+- Per-compartment notes (plain text, up to 2,000 characters; RS3 is locked) and a "Needs verification" flag with a
+  reason on any inventory item, both saved through the same op-based planner sync
+  (`docs/architecture/notes-verification-transfer.md`)
+- Excel export of the whole plan (Compartment Inventory, Equipment Catalog, Compartment Summary, Bundles and Kits,
+  Notes and Exceptions, Export Metadata, plus the legacy Compartments and Inventory Status sheets) and, from the same
+  snapshot, the `l1.checklist-transfer/1` JSON file that MBFD Hub imports into a checklist draft
+  (`scripts/export-manifest.mjs` builds both offline from a saved `GET /api/public/planner` response)
+- Print/PDF layouts
 - Responsive navigation and touch-first controls for phones, tablets, and
   desktop browsers
 
@@ -76,6 +83,8 @@ npm run deploy:worker
 npm run deploy:pages
 ```
 
+Deploy the Worker before Pages whenever the planner op list changes, so the new client never sends an op the
+running Worker does not know (old clients keep working against the new Worker).
 The deployed commit is available in the UI sidebar and at `/version.json`.
 Cloudflare Pages retains prior deployments for rollback. Never place API tokens
 or credentials in this repository.
