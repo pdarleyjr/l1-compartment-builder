@@ -243,10 +243,10 @@ export const COMPARTMENTS = [
     { src: '/images/LS1.webp', title: 'Compartment Photo' },
   ]},
   { id: 'LS2', side: 'Left',  images: [
-    // Owner replaced the LS2 loadout rendering twice the same day (v2, then v3 with the top tilt shelf back). The older
-    // files stay in public/images so open tabs and the main image's "previous" pointer still resolve, but only v3 is
-    // offered in the gallery.
-    { src: '/images/LS2_loadout_2026-11-18-v3.webp', title: 'Loadout Rendering (2026-11-18)' },
+    // Owner replaced the LS2 loadout rendering three times the same day (v2; v3 with a top tilt shelf; v4 with no
+    // shelves, the saws on the PAC board). The older files stay in public/images so open tabs and the main image's
+    // "previous" pointer still resolve, but only v4 is offered in the gallery.
+    { src: '/images/LS2_loadout_2026-11-18-v4.webp', title: 'Loadout Rendering (2026-11-18)' },
     { src: '/images/LS2.webp',            title: 'Compartment Photo'    },
     { src: '/images/LS2_rendering.webp',  title: 'Rendering with Tools' },
   ]},
@@ -288,7 +288,7 @@ export const COMP_LABEL = Object.fromEntries(COMPARTMENTS.map(c => [c.id, c.labe
 // ─── Compartment physical specs — exact measurements from apparatus diagrams ──
 export const COMPARTMENT_SPECS = {
   LS1: 'Left Side 1 (LS1): Forward lower compartment, left side of Pierce apparatus. Overall compartment: 38" H × 17 3/4" W × 27" D. Door opening: 38" H × 15" W. Top shelf: 24" D × 17" W × 18" H. Lower open bay: 20" H. Two-zone vertical layout.',
-  LS2: 'Left Side 2 (LS2): Large main compartment, left side of Pierce apparatus. Overall height: 44" H. Pull-Out Tilt Shelf (upper): 23 3/4" D × 34 1/4" W carrying the SawZall, its blades and the HURST batteries. Middle shelf removed for the 2026-11-18 loadout. Pull-Out Tray (lower): 26" D × 37" W carrying a Lazy Susan rescue tool mount; PAC Mount tool board on the right wall. Primary rescue tool bay.',
+  LS2: 'Left Side 2 (LS2): Large main compartment, left side of Pierce apparatus. Overall height: 44" H. Upper and middle shelving removed for the 2026-11-18 loadout. Pull-Out Tray (lower): 26" D × 37" W carrying a Lazy Susan rescue tool mount and the HURST batteries; PAC Mount tool board on the right wall carrying the chainsaw, SawZall and hand tools. Primary rescue tool bay.',
   LS3: 'Left Side 3 (LS3): Wide horizontal upper compartment, left side. Overall: 80" W × 16 3/8" H × 27" D. Left section: 22" W × 27" D with fixed shelf 26 1/2" W × 23" D (16" H). Right section: 55" W × 27" D (55" fixed width interior). Tilt/pull-out tray: 23 1/2" H × 52" W. Very wide shallow compartment spanning across the left side.',
   LS4: 'Left Side 4 (LS4): Rear upper compartment, left side. Overall: 20" H tall. Door opening: 22" H × 26 1/2" W. Pull-Out Tray: 26" D × 25" W. Inverter installed in upper-left corner. Shallow horizontal bay.',
   RS1: 'Right Side 1 (RS1): Forward lower compartment, right side of Pierce apparatus. Overall compartment: 38" H × 17 3/4" W × 27" D. Door opening: 38" H × 15" W. Top shelf: 24" D × 17" W × 18" H. Lower open bay: 20" H. Two-zone vertical layout.',

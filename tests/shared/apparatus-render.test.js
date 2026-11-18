@@ -63,12 +63,13 @@ describe('compartmentGeometry', () => {
     expect(compartmentGeometry('LS2').orientation).toBe('square');
     expect(compartmentGeometry('RS5').orientation).toBe('portrait');
   });
-  test('features and zones follow the 2026-11-18 loadout (LS2 and RS2: top tilt shelf kept, middle shelf removed)', () => {
-    // LS2's owner rendering v3 brought the top tilt shelf back (SawZall, blades, HURST batteries).
+  test('features and zones follow the 2026-11-18 loadout (LS2 shelving removed, RS2 middle shelf removed)', () => {
+    // LS2's owner rendering v4: no shelves; saws and hand tools on the PAC board, HURST batteries on the tray.
     const ls2 = compartmentGeometry('LS2');
-    expect(ls2.zones).toEqual(expect.arrayContaining(['upper_shelf', 'lower_tray', 'pull_out_tray']));
+    expect(ls2.zones).toEqual(expect.arrayContaining(['lower_tray', 'pull_out_tray']));
+    expect(ls2.zones).not.toContain('upper_shelf');
     expect(ls2.zones).not.toContain('middle_shelf');
-    expect(ls2.features).toEqual(['Pull-Out Tilt Shelf', 'Pull-Out Tray']);
+    expect(ls2.features).toEqual(['Pull-Out Tray']);
     const rs2 = compartmentGeometry('RS2');
     expect(rs2.zones).toEqual(expect.arrayContaining(['upper_shelf', 'lower_tray', 'pull_out_tray']));
     expect(rs2.zones).not.toContain('middle_shelf');
