@@ -11,7 +11,7 @@ import OverviewPanel from './components/OverviewPanel.jsx';
 import Sidebar, { NavDrawer } from './components/Sidebar.jsx';
 import SyncStatusPill from './components/SyncStatusPill.jsx';
 import MigrationAction from './components/MigrationAction.jsx';
-import exportExcel from './components/exportExcel.js';
+import useExportFlow from './components/useExportFlow.jsx';
 import usePlan from './components/usePlan.js';
 import usePlanActions from './components/usePlanActions.js';
 
@@ -71,7 +71,8 @@ export default function App() {
   const handleReset = () => {
     if (window.confirm('Clear ALL compartment assignments? This cannot be undone.')) actions.reset();
   };
-  const handleExport = () => exportExcel(view.allocations, plan);
+  const exporter = useExportFlow(sync);
+  const handleExport = exporter.start;
   const closeStudio = useCallback(() => { setStudio(null); refreshGalleries(); }, []);
   const counts = Object.fromEntries(COMPARTMENTS.map(c => [c.id, view.allocations[c.id].filter(Boolean).length]));
 
@@ -174,6 +175,7 @@ export default function App() {
           />
         )}
       </main>
+      {exporter.ui}
 
       {studio && studioAvailable && (
         <StudioLayer

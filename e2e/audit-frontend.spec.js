@@ -224,7 +224,7 @@ test.describe('print, export and performance', () => {
     expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
   });
 
-  test('FM-27 Excel export contains only the allocations and inventory sheets (same columns as before)', async ({ page }) => {
+  test('FM-27 Excel export keeps the legacy allocations and inventory sheets (same columns as before) after the new sheets', async ({ page }) => {
     await boot(page);
     const dl = page.waitForEvent('download');
     await page.getByRole('button', { name: 'Export Excel' }).click();
@@ -233,7 +233,10 @@ test.describe('print, export and performance', () => {
     const file = join(dir, 'plan.xlsx');
     await download.saveAs(file);
     const wb = execFileSync('unzip', ['-p', file, 'xl/workbook.xml']).toString();
-    expect([...wb.matchAll(/<sheet [^>]*name="([^"]+)"/g)].map(m => m[1])).toEqual(['Compartments', 'Inventory Status']);
+    expect([...wb.matchAll(/<sheet [^>]*name="([^"]+)"/g)].map(m => m[1])).toEqual([
+      'Compartment Inventory', 'Equipment Catalog', 'Compartment Summary', 'Bundles and Kits', 'Notes and Exceptions', 'Export Metadata',
+      'Compartments', 'Inventory Status',
+    ]);
     const shared = execFileSync('unzip', ['-p', file, 'xl/sharedStrings.xml']).toString();
     for (const h of ['Equipment Item', 'Total Qty', 'Placed', 'Remaining', 'Assigned To', 'Dimensions', 'Status']) expect(shared).toContain(h);
   });

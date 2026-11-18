@@ -1,50 +1,39 @@
-import { COMPARTMENTS, COMP_LABEL, SLOTS_PER_COMPARTMENT } from '../../shared/apparatus.js';
+import { buildSnapshot } from '../lib/export/snapshot.js';
+import { buildManifest } from '../lib/export/manifest.js';
+import { buildWorkbookSheets } from '../lib/export/workbook.js';
+import { dateStamp, manifestFilename, mergeViewWithDoc, workbookFilename } from '../lib/export/files.js';
 
 /**
- * Download L1_Compartment_Plan.xlsx (sheets "Compartments" and "Inventory Status").
- * @param {Record<string,string[]>} allocations
- * @param {ReturnType<import('./usePlan.js').default>} plan
+ * Build ONE frozen snapshot + manifest from the planner sync state and download the workbook.
+ * @param {{sync:{view:object, doc:object|null, revision:number, pending:number}, choice?:'local'|'saved'}} args
+ *   choice 'saved' exports the last server doc (syncState 'confirmed'); 'local' (default) exports the local view.
+ * @returns {Promise<{snapshot:object, manifest:object, date:string, workbookName:string}>}
  */
-export default async function exportExcel(allocations, plan) {
-  const { effectiveInventory, effectiveDimensions, getQty, placedStats } = plan;
-  const { default: writeXlsxFile } = await import('write-excel-file/browser');
-
-  // Sheet 1: Compartment Assignments
-  const compHeaders = ['Slot', ...COMPARTMENTS.map(c => c.label ?? c.id)];
-  const compRows = [];
-  const maxSlots = Math.max(SLOTS_PER_COMPARTMENT, ...COMPARTMENTS.map(c => (allocations[c.id] ?? []).length));
-  for (let i = 0; i < maxSlots; i++) {
-    compRows.push([i + 1, ...COMPARTMENTS.map(c => (allocations[c.id] ?? [])[i] || '')]);
-  }
-
-  // Sheet 2: Inventory Status
-  const invHeaders = ['Equipment Item', 'Total Qty', 'Placed', 'Remaining', 'Assigned To', 'Dimensions', 'Status'];
-  const invRows = effectiveInventory.map(item => {
-    const stats = placedStats[item.name];
-    const qty = getQty(item.name);
-    const placed = stats?.total ?? 0;
-    const remaining = qty - placed;
-    const assignedTo = Object.entries(stats?.byComp ?? {})
-      .map(([comp, cnt]) => cnt > 1 ? `${COMP_LABEL[comp] ?? comp} x${cnt}` : (COMP_LABEL[comp] ?? comp))
-      .join(', ');
-    const status = placed > qty ? 'Over' : remaining === 0 ? 'Complete' : placed > 0 ? 'Partial' : 'Pending';
-    return [item.name, qty, placed, remaining, assignedTo || '', effectiveDimensions[item.name] || '', status];
+export default async function exportPlan({ sync, choice = 'local' }) {
+  const saved = choice === 'saved' && sync.doc;
+  const dirty = !saved && sync.pending > 0;
+  const snapshot = buildSnapshot({
+    doc: saved ? sync.doc : mergeViewWithDoc(sync.view, sync.doc),
+    revision: sync.revision, pending: dirty ? sync.pending : 0, syncState: dirty ? 'local_changes' : 'confirmed',
+    buildSha: import.meta.env?.VITE_BUILD_SHA || 'local', origin: globalThis.location?.origin ?? '', exportedAt: new Date().toISOString(),
   });
-  const toSheet = rows => rows.map((row, rowIndex) => row.map(value => ({
-    value,
-    type: typeof value === 'number' ? Number : String,
-    fontWeight: rowIndex === 0 ? 'bold' : undefined,
-  })));
-  await writeXlsxFile([
-    {
-      data: toSheet([compHeaders, ...compRows]),
-      sheet: 'Compartments',
-      stickyRowsCount: 1,
-    },
-    {
-      data: toSheet([invHeaders, ...invRows]),
-      sheet: 'Inventory Status',
-      stickyRowsCount: 1,
-    },
-    ]).toFile('L1_Compartment_Plan.xlsx');
+  const manifest = buildManifest(snapshot);
+  const date = dateStamp();
+  const workbookName = workbookFilename(snapshot.source.plannerRevision, date);
+  const { default: writeXlsxFile } = await import('write-excel-file/browser');
+  await writeXlsxFile(buildWorkbookSheets(snapshot, manifest)).toFile(workbookName);
+  return { snapshot, manifest, date, workbookName };
+}
+
+/** Download the manifest of an export result as JSON (no state is read again). */
+export function downloadManifest({ manifest, date }) {
+  const blob = new Blob([`${JSON.stringify(manifest, null, 2)}\n`], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = manifestFilename(manifest.source.plannerRevision, date);
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 10_000);
 }
