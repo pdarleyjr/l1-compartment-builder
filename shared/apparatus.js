@@ -242,7 +242,9 @@ export const COMPARTMENTS = [
     { src: '/images/LS1.webp', title: 'Compartment Photo' },
   ]},
   { id: 'LS2', side: 'Left',  images: [
-    { src: '/images/LS2_loadout_2026-11-18.webp', title: 'Loadout Rendering (2026-11-18)' },
+    // Owner replaced the first LS2 loadout rendering the same day (v2). The old file stays in public/images so open
+    // tabs and the main image's "previous" pointer still resolve, but it is no longer offered in the gallery.
+    { src: '/images/LS2_loadout_2026-11-18-v2.webp', title: 'Loadout Rendering (2026-11-18)' },
     { src: '/images/LS2.webp',            title: 'Compartment Photo'    },
     { src: '/images/LS2_rendering.webp',  title: 'Rendering with Tools' },
   ]},
