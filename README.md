@@ -52,12 +52,19 @@ url, thumbUrl, title, provenance}]}`.
 ## Verification
 
 ```powershell
-npm audit --audit-level=low
+npm run audit
 npm run lint
 npm run test:coverage
 npm run build
 npm run test:e2e
 ```
+
+`npm run audit` is `npm audit` at level low minus the temporary, dev-only exceptions in `audit-exceptions.json`
+(currently GHSA-fc5q-39xc-vjpf, picomatch, no fixed release yet). It fails on any other advisory, when an excepted
+advisory reaches a production dependency, when a fixed version is published, or after the exception expires.
+
+CI runs on GitHub-hosted `ubuntu-latest` (Ubuntu 26.04) with `PLAYWRIGHT_HOST_PLATFORM_OVERRIDE=ubuntu24.04-x64`, because
+Playwright 1.59 does not list Ubuntu 26.04 yet; set the same variable when installing browsers on a 26.04 machine.
 
 The end-to-end suite serves every `/api` request from an in-memory implementation
 of the API contract (`e2e/helpers/fake-api.js`: session with a signed-in/out switch,

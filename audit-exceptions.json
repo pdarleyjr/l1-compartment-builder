@@ -1,0 +1,14 @@
+{
+  "comment": "Temporary npm audit exceptions read by scripts/ci/audit.mjs. Each one must be dev/build tooling only, have no published fix, and expire. Remove an entry as soon as a fixed version is installed; the audit gate fails by itself when a fix is published, when the advisory reaches a production dependency, or after the expiry date.",
+  "exceptions": [
+    {
+      "id": "GHSA-fc5q-39xc-vjpf",
+      "package": "picomatch",
+      "reason": "ReDoS in picomatch <= 4.0.7 with no patched release yet. Reached only through build/test tooling (vite, vitest, tailwindcss, chokidar); nothing is shipped to the browser or the Worker.",
+      "lastVulnerableVersion": "4.0.7",
+      "added": "2026-11-18",
+      "expires": "2027-02-28",
+      "approvedBy": "owner (2026-11-18: ignore until there is a fix)"
+    }
+  ]
+}

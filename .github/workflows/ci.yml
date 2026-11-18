@@ -12,6 +12,10 @@ jobs:
   verify:
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    env:
+      # ubuntu-latest is Ubuntu 26.04, which Playwright 1.59 does not list yet, so `playwright install` refuses the
+      # platform. The Ubuntu 24.04 Chromium build runs on 26.04 (the AIW workers use it the same way).
+      PLAYWRIGHT_HOST_PLATFORM_OVERRIDE: ubuntu24.04-x64
     steps:
       - uses: actions/checkout@v4
 
@@ -21,8 +25,15 @@ jobs:
           cache: npm
 
       - run: npm ci
-      - run: npx playwright install --with-deps chromium
-      - run: npm audit --audit-level=low
+      # Browser only: `--with-deps` would apt-install the 24.04 package list on 26.04. The runner image already ships
+      # the libraries Chromium needs; the next step fails loudly if one is missing.
+      - run: npx playwright install chromium
+      - name: Check Chromium's shared libraries
+        run: |
+          missing=$(find ~/.cache/ms-playwright -type f \( -name chrome -o -name chrome-headless-shell \) -exec ldd {} \; | grep 'not found' | sort -u || true)
+          if [ -n "$missing" ]; then echo "Chromium needs: $missing"; exit 1; fi
+      # npm audit at level low, minus the temporary dev-only exceptions in audit-exceptions.json (expiring, self-retiring).
+      - run: npm run audit
       - run: npm run lint
       - run: npm run test:coverage
       - run: npm run build
