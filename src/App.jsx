@@ -8,6 +8,7 @@ import CompartmentPanel from './components/CompartmentPanel.jsx';
 import ErrorBoundary from './components/ErrorBoundary.jsx';
 import InventoryPanel from './components/InventoryPanel.jsx';
 import OverviewPanel from './components/OverviewPanel.jsx';
+import ProgressPanel from './components/ProgressPanel.jsx';
 import Sidebar, { NavDrawer } from './components/Sidebar.jsx';
 import SyncStatusPill from './components/SyncStatusPill.jsx';
 import MigrationAction from './components/MigrationAction.jsx';
@@ -159,6 +160,7 @@ export default function App() {
         {activeTab === 'inventory' && (
           <InventoryPanel plan={plan} actions={actions} readOnly={readOnly} onExport={handleExport} />
         )}
+        {activeTab === 'progress' && <ProgressPanel view={view} plan={plan} onNav={nav} />}
         {activeOv && (
           <OverviewPanel ov={activeOv} allocations={view.allocations} mainImages={mainImages} onExport={handleExport} />
         )}
