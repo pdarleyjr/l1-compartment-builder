@@ -14,9 +14,10 @@ const exception = { id: PICO, package: 'picomatch', reason: 'dev only', lastVuln
 const base = { all: picoReport(), production: clean, exceptions: [exception], today: '2026-11-18', latest: { picomatch: '4.0.7' } };
 
 describe('audit policy', () => {
-  test('the repository exception file is valid and lists the picomatch advisory', () => {
+  test('the repository exception file is valid (the picomatch exception was retired once npm audit stopped reporting it)', () => {
     const file = JSON.parse(readFileSync(new URL('../../audit-exceptions.json', import.meta.url), 'utf8'));
-    expect(file.exceptions.map(e => e.id)).toContain(PICO);
+    expect(Array.isArray(file.exceptions)).toBe(true);
+    expect(file.exceptions.map(e => e.id)).not.toContain(PICO);
     for (const e of file.exceptions) expect(e.expires).toMatch(/^\d{4}-\d{2}-\d{2}$/);
   });
   test('the excepted dev-only advisory passes while no fix exists', () => {

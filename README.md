@@ -62,7 +62,8 @@ npm run test:e2e
 ```
 
 `npm run audit` is `npm audit` at level low minus the temporary, dev-only exceptions in `audit-exceptions.json`
-(currently GHSA-fc5q-39xc-vjpf, picomatch, no fixed release yet). It fails on any other advisory, when an excepted
+(none at the moment; the picomatch GHSA-fc5q-39xc-vjpf exception was removed on 2026-11-18 once npm audit stopped
+reporting it). It fails on any other advisory, when an excepted
 advisory reaches a production dependency, when a fixed version is published, or after the exception expires.
 
 CI runs on GitHub-hosted `ubuntu-latest` (Ubuntu 26.04) with `PLAYWRIGHT_HOST_PLATFORM_OVERRIDE=ubuntu24.04-x64`, because
