@@ -3,6 +3,8 @@ import {
   AlertCircle, ChevronDown, Layers, ListPlus, Plus, Ruler, Settings, Sparkles, Trash2, X, CheckSquare, Square,
 } from 'lucide-react';
 import { SLOTS_PER_COMPARTMENT } from '../../shared/apparatus.js';
+import { NOTES_LOCKED_COMPARTMENTS } from '../../shared/contracts.js';
+import CompartmentNotes from './CompartmentNotes.jsx';
 import ActionButtons from './ActionButtons.jsx';
 import ComboSlot from './ComboSlot.jsx';
 import CompartmentMedia from './CompartmentMedia.jsx';
@@ -13,7 +15,7 @@ import { BUNDLE_COLORS } from './usePlanActions.js';
  * render with key={comp.id} so it resets when the compartment changes.
  * @param {object} props see App.jsx for the wiring
  */
-export default function CompartmentPanel({ comp, allocations, bundles, plan, actions, readOnly, onExport, session, signIn, plannerRevision, mainImage, studioAvailable, onOpenStudio }) {
+export default function CompartmentPanel({ comp, allocations, bundles, plan, actions, readOnly, onExport, session, signIn, plannerRevision, mainImage, studioAvailable, onOpenStudio, notes, serverNotes, sync }) {
   const { getQty, getOptions, placedStats, effectiveDimensions } = plan;
   const [bundleMode, setBundleMode]         = useState(false);
   const [selectedSlots, setSelectedSlots]   = useState([]);
@@ -306,6 +308,11 @@ export default function CompartmentPanel({ comp, allocations, bundles, plan, act
                 )}
               </div>}
             </div>
+
+            {!NOTES_LOCKED_COMPARTMENTS.includes(comp.id) && (
+              <CompartmentNotes comp={comp} note={notes?.[comp.id]} serverNote={serverNotes?.[comp.id]} sync={sync}
+                readOnly={readOnly} onSave={text => actions.setNote(comp.id, text)} />
+            )}
 
             {/* Existing bundles — collapsible */}
             {compBundles.length > 0 && (

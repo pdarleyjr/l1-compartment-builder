@@ -21,6 +21,7 @@ describe('validateOp', () => {
     { op: 'setRemoved', name: 'a', removed: true },
     { op: 'upsertBundle', comp: 'LS1', bundle: { id: 'abc123', name: 'B', colorIdx: 0, slotIndices: [0] } },
     { op: 'deleteBundle', comp: 'LS1', id: 'abc123' }, { op: 'renameEquipment', from: 'a', to: 'b' },
+    { op: 'setNote', comp: 'LS1', text: 'n', expect: '' }, { op: 'setUnverified', name: 'a', reason: null },
     { type: 'setSlot', comp: 'LS1', index: 0, value: '', expect: 'x' },
   ];
   test.each(good.map(o => [o.op ?? o.type, o]))('accepts %s', (_n, op) => expect(validateOp(op)).toEqual({ ok: true }));

@@ -1,5 +1,5 @@
 // Planner op engine: validateOp + applyOps (pure; preconditions, quantity invariant, bundle integrity).
-import { CONFLICT_REASONS, ID_PATTERN, ID_PREFIX, PLANNER_LIMITS, PLANNER_OPS } from '../contracts.js';
+import { COMPARTMENT_IDS, CONFLICT_REASONS, ID_PATTERN, ID_PREFIX, NOTE_LIMITS, NOTES_LOCKED_COMPARTMENTS, PLANNER_LIMITS, PLANNER_OPS } from '../contracts.js';
 import { newId as defaultNewId } from '../ids.js';
 import { assignedCounts, baseEquipmentIds, clone, dimsOf, inventoryNames, isBaseName, normalizeDoc, qtyOf } from './doc.js';
 
@@ -22,7 +22,13 @@ const SHAPES = {
   upsertBundle: { comp: 'comp', bundle: 'bundle' },
   deleteBundle: { comp: 'comp', id: 'bundleId' },
   renameEquipment: { from: 'name', to: 'name' },
+  setNote: { comp: 'comp', text: 'noteText', expect: 'noteExpect' },
+  setUnverified: { name: 'name', reason: 'reasonOrNull' },
 };
+// Plain text: \n and \t allowed, every other C0 control character (and DEL) rejected.
+// eslint-disable-next-line no-control-regex
+const CONTROL_CHARS = /[\u0000-\u0008\u000B-\u001F\u007F]/;
+const plainText = (v, max) => typeof v === 'string' && v.length <= max && !CONTROL_CHARS.test(v);
 const checks = {
   comp: v => typeof v === 'string' && v.length > 0 && v.length <= 50,
   index: v => isInt(v, 0, PLANNER_LIMITS.maxSlotsPerCompartment - 1),
@@ -32,6 +38,9 @@ const checks = {
   qtyOrNull: v => v === null || isInt(v, 0, QTY_MAX),
   dimOrNull: v => v === null || (typeof v === 'string' && v.length > 0 && v.length <= DIMS_MAX),
   bool: v => typeof v === 'boolean',
+  noteText: v => plainText(v, NOTE_LIMITS.textMax),
+  noteExpect: v => typeof v === 'string' && v.length <= NOTE_LIMITS.textMax,
+  reasonOrNull: v => v === null || plainText(v, NOTE_LIMITS.reasonMax),
   bundleId: v => typeof v === 'string' && /^[0-9a-z_]{1,64}$/.test(v),
   tool: t => isObj(t) && isName(t.name) && isInt(t.qty, 0, QTY_MAX)
     && (t.dimensions === undefined || t.dimensions === null || (typeof t.dimensions === 'string' && t.dimensions.length <= DIMS_MAX))
@@ -146,6 +155,7 @@ const handlers = {
     if (idx < 0) return;
     doc.customTools.splice(idx, 1);
     delete doc.customQtys[op.name];
+    delete doc.unverified[op.name];
     clearName(doc, op.name);
     if (!isBaseName(op.name)) delete doc.equipmentIds[op.name];
   },
@@ -159,6 +169,7 @@ const handlers = {
     if (op.removed && !has) {
       doc.removedItems.push(op.name);
       delete doc.customQtys[op.name];
+      delete doc.unverified[op.name];
       clearName(doc, op.name);
     } else if (!op.removed && has) {
       doc.removedItems = doc.removedItems.filter(n => n !== op.name);
@@ -196,10 +207,28 @@ const handlers = {
     }
     if (doc.customQtys[from] !== undefined) { doc.customQtys[to] = doc.customQtys[from]; delete doc.customQtys[from]; }
     if (doc.customDimensions[from] !== undefined) { doc.customDimensions[to] = doc.customDimensions[from]; delete doc.customDimensions[from]; }
+    if (doc.unverified[from] !== undefined) { doc.unverified[to] = doc.unverified[from]; delete doc.unverified[from]; }
     if (doc.equipmentIds[from]) { doc.equipmentIds[to] = doc.equipmentIds[from]; delete doc.equipmentIds[from]; }
     else if (isBaseName(from)) doc.equipmentIds[to] = baseEquipmentIds()[from];
     for (const slots of Object.values(doc.allocations)) slots.forEach((v, i) => { if (v === from) slots[i] = to; });
     if (customIdx >= 0) doc.removedItems = doc.removedItems.map(n => (n === from ? to : n));
+  },
+  setNote(doc, op, ctx) {
+    if (!COMPARTMENT_IDS.includes(op.comp)) throw new Conflict('NOT_FOUND', undefined, `unknown compartment ${op.comp}`);
+    if (NOTES_LOCKED_COMPARTMENTS.includes(op.comp)) throw new Conflict('INVALID', undefined, 'notes are locked for this compartment');
+    const current = doc.notes[op.comp]?.text ?? '';
+    if (current !== op.expect) {
+      if (current === op.text) return; // already satisfied
+      throw new Conflict('PRECONDITION', current);
+    }
+    if (current === op.text) return;
+    if (op.text === '') delete doc.notes[op.comp];
+    else doc.notes[op.comp] = { text: op.text, updatedAt: ctx.now };
+  },
+  setUnverified(doc, op) {
+    if (op.reason === null) { delete doc.unverified[op.name]; return; }
+    if (!inventoryNames(doc).includes(op.name)) throw new Conflict('NOT_FOUND', undefined, `unknown equipment ${op.name}`);
+    doc.unverified[op.name] = op.reason;
   },
 };
 

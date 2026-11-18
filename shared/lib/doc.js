@@ -1,5 +1,5 @@
 // Planner doc v2 basics: empty doc, effective inventory, counts, invariants repair. See shared/planner.js.
-import { COMPARTMENT_IDS, ID_PREFIX, PLANNER_SCHEMA } from '../contracts.js';
+import { COMPARTMENT_IDS, ID_PREFIX, NOTE_LIMITS, NOTES_LOCKED_COMPARTMENTS, PLANNER_SCHEMA } from '../contracts.js';
 import { DIMENSIONS, INVENTORY_BY_NAME, MASTER_INVENTORY, SLOTS_PER_COMPARTMENT } from '../apparatus.js';
 import { equipmentIdForNameSync, newId as defaultNewId } from '../ids.js';
 
@@ -23,7 +23,7 @@ export function emptyDocV2() {
   }
   return {
     schema: PLANNER_SCHEMA, allocations, customQtys: {}, customTools: [], customDimensions: {}, removedItems: [],
-    bundles: {}, equipmentIds: { ...baseEquipmentIds() }, assignmentIds,
+    bundles: {}, equipmentIds: { ...baseEquipmentIds() }, assignmentIds, notes: {}, unverified: {},
   };
 }
 
@@ -97,6 +97,18 @@ export function normalizeDoc(doc, ctx = {}) {
   out.bundles ??= {};
   out.equipmentIds ??= {};
   out.assignmentIds ??= {};
+  out.notes ??= {};
+  out.unverified ??= {};
+  for (const [compId, note] of Object.entries(out.notes)) {
+    const bad = !COMPARTMENT_IDS.includes(compId) || !note || typeof note.text !== 'string' || !note.text
+      || note.text.length > NOTE_LIMITS.textMax || !Number.isFinite(note.updatedAt);
+    // A locked compartment's entry is dropped only when malformed; the op engine never creates one.
+    if (bad) { delete out.notes[compId]; repairs.push(`dropped note ${compId}`); }
+    else if (NOTES_LOCKED_COMPARTMENTS.includes(compId)) repairs.push(`locked compartment ${compId} has a note`);
+  }
+  for (const [name, reason] of Object.entries(out.unverified)) {
+    if (typeof reason !== 'string') { delete out.unverified[name]; repairs.push(`dropped unverified ${name}`); }
+  }
   for (const id of COMPARTMENT_IDS) {
     if (!Array.isArray(out.allocations[id])) {
       out.allocations[id] = Array(SLOTS_PER_COMPARTMENT).fill('');

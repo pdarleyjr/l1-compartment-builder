@@ -22,7 +22,7 @@ const str = v => (typeof v === 'string' ? v : '');
 export function emptyView() {
   const allocations = {};
   COMPARTMENTS.forEach(c => { allocations[c.id] = Array(SLOTS_PER_COMPARTMENT).fill(''); });
-  return { allocations, customQtys: {}, customTools: [], bundles: {}, removedItems: [], customDimensions: {} };
+  return { allocations, customQtys: {}, customTools: [], bundles: {}, removedItems: [], customDimensions: {}, notes: {}, unverified: {} };
 }
 
 /**
@@ -51,6 +51,13 @@ export function sanitizeView(raw) {
     }));
   }
   if (isObj(raw.customDimensions)) for (const [k, v] of Object.entries(raw.customDimensions)) if (typeof v === 'string') out.customDimensions[k] = v;
+  if (isObj(raw.notes)) {
+    for (const c of COMPARTMENTS) {
+      const n = raw.notes[c.id];
+      if (isObj(n) && typeof n.text === 'string' && n.text && Number.isFinite(n.updatedAt)) out.notes[c.id] = { text: n.text, updatedAt: n.updatedAt };
+    }
+  }
+  if (isObj(raw.unverified)) for (const [k, v] of Object.entries(raw.unverified)) if (typeof v === 'string') out.unverified[k] = v;
   if (Array.isArray(raw.removedItems)) out.removedItems = [...new Set(raw.removedItems.filter(v => typeof v === 'string'))];
   if (isObj(raw.bundles)) {
     for (const [comp, list] of Object.entries(raw.bundles)) {
