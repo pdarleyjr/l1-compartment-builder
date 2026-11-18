@@ -167,6 +167,7 @@ export default function App() {
             comp={activeComp} allocations={view.allocations} bundles={view.bundles}
             plan={plan} actions={actions} readOnly={readOnly} onExport={handleExport}
             session={session} signIn={signIn} plannerRevision={sync.revision}
+            notes={view.notes} serverNotes={sync.doc?.notes} sync={{ status: sync.status, pending: sync.pending, hasDoc: !!sync.doc }}
             mainImage={mainImages[activeComp.id]}
             studioAvailable={studioAvailable}
             onOpenStudio={(step) => setStudio({ compId: activeComp.id, step })}

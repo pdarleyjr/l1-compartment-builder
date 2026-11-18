@@ -8,6 +8,7 @@ import { COMPARTMENTS, DIMENSIONS, INVENTORY_BY_NAME, MASTER_INVENTORY } from '.
  */
 export default function usePlan(view) {
   const { allocations, customQtys, customTools, removedItems, customDimensions } = view;
+  const unverified = view.unverified ?? {};
 
   const effectiveInventory = useMemo(() => [
     ...MASTER_INVENTORY.filter(i => !removedItems.includes(i.name)),
@@ -52,5 +53,5 @@ export default function usePlan(view) {
   });
 
   const isCustom = name => customTools.some(t => t.name === name);
-  return { effectiveInventory, effectiveDimensions, getQty, placedStats, totalPlaced, totalReq, getOptions, isCustom };
+  return { unverified, effectiveInventory, effectiveDimensions, getQty, placedStats, totalPlaced, totalReq, getOptions, isCustom };
 }

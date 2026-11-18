@@ -5,7 +5,7 @@ import { equipmentIdForNameSync } from '../../shared/ids.js';
 import { assignedCounts, compartmentAssignments, effectiveInventory, emptyDocV2, migrateV1toV2, normalizeDoc, projectV1 } from '../../shared/planner.js';
 import { counterIds, FOG, IRONS, JACK, THERMAL, VSTRUT, v1Fixture, CELLAR, GRIPHOIST } from './fixtures.js';
 
-const V1_KEYS = ['allocations', 'bundles', 'customDimensions', 'customQtys', 'customTools', 'removedItems'];
+const V1_KEYS = ['allocations', 'bundles', 'customDimensions', 'customQtys', 'customTools', 'notes', 'removedItems', 'unverified'];
 
 describe('emptyDocV2', () => {
   test('all compartments × 15 empty slots, base ids, parity', () => {
@@ -34,7 +34,7 @@ describe('migrateV1toV2', () => {
     const { doc, report } = await migrateV1toV2(v1, { newId: counterIds() });
     const proj = projectV1(doc);
     expect(Object.keys(proj).sort()).toEqual(V1_KEYS);
-    expect(proj).toEqual(v1);
+    expect(proj).toEqual({ ...v1, notes: {}, unverified: {} });
     expect(report.warnings).toEqual([]);
   });
   test('does not mutate the input', async () => {
@@ -122,7 +122,7 @@ describe('projectV1', () => {
     expect(doc.allocations.LS1[0]).toBe(FOG);
   });
   test('tolerates sparse docs', () => {
-    expect(projectV1({})).toEqual({ allocations: {}, customQtys: {}, customTools: [], bundles: {}, removedItems: [], customDimensions: {} });
+    expect(projectV1({})).toEqual({ allocations: {}, customQtys: {}, customTools: [], bundles: {}, removedItems: [], customDimensions: {}, notes: {}, unverified: {} });
   });
 });
 

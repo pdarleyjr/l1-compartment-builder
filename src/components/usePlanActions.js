@@ -90,6 +90,20 @@ export default function usePlanActions({ update, hintRename }, plan) {
         if (slots.length <= SLOTS_PER_COMPARTMENT || slots[slots.length - 1] !== '') return v;
         return withAllocations(v, { ...v.allocations, [compId]: slots.slice(0, -1) });
       }),
+      /** Set (or, with blank text, delete) the compartment note. Trailing whitespace is trimmed. */
+      setNote: (compId, text) => update(v => {
+        const clean = String(text ?? '').replace(/\s+$/, '');
+        const notes = { ...(v.notes ?? {}) };
+        if ((notes[compId]?.text ?? '') === clean) return v;
+        if (clean) notes[compId] = { text: clean, updatedAt: Date.now() }; else delete notes[compId];
+        return { ...v, notes };
+      }),
+      /** reason string (may be '') marks the item "needs verification"; null marks it verified. */
+      setUnverified: (name, reason) => update(v => {
+        const unverified = { ...(v.unverified ?? {}) };
+        if (reason === null) delete unverified[name]; else unverified[name] = String(reason).trim();
+        return JSON.stringify(unverified) === JSON.stringify(v.unverified ?? {}) ? v : { ...v, unverified };
+      }),
       reset: () => update(v => withAllocations(v, emptyAllocations())),
       addTool: ({ name, qty, dimensions }) => update(v => ({ ...v, customTools: [...v.customTools, { name, qty, dimensions }] })),
       removeItem: name => {
@@ -98,9 +112,10 @@ export default function usePlanActions({ update, hintRename }, plan) {
           const allocations = {};
           for (const [compId, slots] of Object.entries(v.allocations)) allocations[compId] = slots.map(s => (s === name ? '' : s));
           const customQtys = { ...v.customQtys }; delete customQtys[name];
+          const unverified = { ...(v.unverified ?? {}) }; delete unverified[name];
           const custom = isCustom(name);
           return withAllocations({
-            ...v, customQtys,
+            ...v, customQtys, unverified,
             customTools: custom ? v.customTools.filter(t => t.name !== name) : v.customTools,
             removedItems: custom || v.removedItems.includes(name) ? v.removedItems : [...v.removedItems, name],
           }, allocations);
@@ -125,8 +140,10 @@ export default function usePlanActions({ update, hintRename }, plan) {
             const customQtys = { ...v.customQtys }; delete customQtys[item.name]; customQtys[newName] = newQty;
             const customDimensions = { ...v.customDimensions }; delete customDimensions[item.name];
             if (newDims) customDimensions[newName] = newDims;
+            const unverified = { ...(v.unverified ?? {}) };
+            if (item.name in unverified) { unverified[newName] = unverified[item.name]; delete unverified[item.name]; }
             return {
-              ...v, allocations, customQtys, customDimensions,
+              ...v, allocations, customQtys, customDimensions, unverified,
               customTools: custom
                 ? v.customTools.map(t => (t.name === item.name ? { ...t, name: newName, qty: newQty, dimensions: newDims } : t))
                 : [...v.customTools, { name: newName, qty: newQty, dimensions: newDims }],

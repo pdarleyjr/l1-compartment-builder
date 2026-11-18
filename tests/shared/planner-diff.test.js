@@ -15,7 +15,10 @@ function roundTrip(next, opts) {
   for (const op of ops) expect(validateOp(op)).toEqual({ ok: true });
   const r = applyOps(base, ops, ctx());
   expect(r.conflicts).toEqual([]);
-  return { ops, result: projectV1(r.doc) };
+  // notes/unverified are covered in planner-notes.test.js; the v1 fixtures here have neither
+  const { notes, unverified, ...result } = projectV1(r.doc);
+  expect([notes, unverified]).toEqual([{}, {}]);
+  return { ops, result };
 }
 const edit = fn => { const n = structuredClone(v1); fn(n); return n; };
 

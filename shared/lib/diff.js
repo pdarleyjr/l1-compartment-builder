@@ -72,7 +72,7 @@ const keyedDiff = (baseMap, nextMap, make) => {
  * Diff two planner states into ops. `base`/`next` may be v1 views or v2 docs. `opts.renames = [{from,to}]` emits
  * renameEquipment (applied to a copy of base first) so the rename shows up as one op, not remove + add.
  * Op order keeps sequential application valid: renames → custom tools/qty up → slot growth → slot changes →
- * slot shrink → removals → dimensions → bundles.
+ * slot shrink → removals → dimensions → notes → unverified → bundles.
  * @param {object} base @param {object} next @param {{renames?:{from:string,to:string}[]}} [opts]
  * @returns {object[]}
  */
@@ -119,5 +119,13 @@ export function diffDocs(base, next, opts = {}) {
   }
   const dimOps = keyedDiff(from.customDimensions, to.customDimensions, (name, value) => ({ op: 'setDimension', name, value }));
 
-  return [...ops, ...unremove, ...toolOps, ...qtyOps, ...slots.grow, ...slots.sets, ...slots.shrink, ...remove, ...delTools, ...dimOps, ...bundleOps];
+  const noteOps = [];
+  for (const compId of new Set([...Object.keys(from.notes), ...Object.keys(to.notes)])) {
+    const was = from.notes[compId]?.text ?? '';
+    const now = to.notes[compId]?.text ?? '';
+    if (was !== now) noteOps.push({ op: 'setNote', comp: compId, text: now, expect: was });
+  }
+  const unverifiedOps = keyedDiff(from.unverified, to.unverified, (name, reason) => ({ op: 'setUnverified', name, reason }));
+
+  return [...ops, ...unremove, ...toolOps, ...qtyOps, ...slots.grow, ...slots.sets, ...slots.shrink, ...remove, ...delTools, ...dimOps, ...noteOps, ...unverifiedOps, ...bundleOps];
 }
