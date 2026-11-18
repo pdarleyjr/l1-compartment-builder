@@ -238,7 +238,8 @@ export const CONSOLIDATION_RENAMES = {
 export const COMPARTMENTS = [
   { id: 'CabRearZone', label: 'Rear Zone', side: 'Cab', images: [{ src: '/images/CabRearZone.webp', title: 'Compartment Photo' }] },
   { id: 'LS1', side: 'Left',  images: [
-    { src: '/images/LS1_loadout_2026-11-18.webp', title: 'Loadout Rendering (2026-11-18)' },
+    // Owner replaced the first LS1 loadout rendering the same day (v2); the v1 file stays for open tabs.
+    { src: '/images/LS1_loadout_2026-11-18-v2.webp', title: 'Loadout Rendering (2026-11-18)' },
     { src: '/images/LS1.webp', title: 'Compartment Photo' },
   ]},
   { id: 'LS2', side: 'Left',  images: [
