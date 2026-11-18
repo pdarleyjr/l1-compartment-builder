@@ -15,7 +15,11 @@ function run(args) {
     throw e;
   }
 }
-const audit = extra => JSON.parse(run(['audit', '--json', '--audit-level=low', ...extra]) || '{}');
+// No fallback: empty or unparsable output becomes null, which evaluateAudit rejects (fail closed).
+const audit = extra => {
+  const out = run(['audit', '--json', '--audit-level=low', ...extra]);
+  try { return JSON.parse(out); } catch { return null; }
+};
 
 const { exceptions } = JSON.parse(readFileSync(new URL('../../audit-exceptions.json', import.meta.url), 'utf8'));
 const latest = {};

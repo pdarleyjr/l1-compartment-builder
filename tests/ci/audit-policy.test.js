@@ -4,7 +4,7 @@ import { advisoriesOf, evaluateAudit, newerThan } from '../../scripts/ci/audit-p
 
 const PICO = 'GHSA-fc5q-39xc-vjpf';
 const advisory = (name, id, severity = 'high') => ({ source: 1, name, title: 'ReDoS', url: `https://github.com/advisories/${id}`, severity, range: '<=4.0.7' });
-const report = (entries) => ({ auditReportVersion: 2, vulnerabilities: entries });
+const report = (entries) => ({ auditReportVersion: 2, vulnerabilities: entries, metadata: { vulnerabilities: { total: Object.keys(entries).length } } });
 const picoReport = (fixAvailable = { name: 'vitest', version: '3.1.4', isSemVerMajor: true }) => report({
   picomatch: { name: 'picomatch', severity: 'high', via: [advisory('picomatch', PICO)], fixAvailable },
   anymatch: { name: 'anymatch', severity: 'high', via: ['picomatch'], fixAvailable: true },
@@ -47,6 +47,18 @@ describe('audit policy', () => {
     expect(evaluateAudit({ ...base, latest: { picomatch: '4.0.8' } }).failures[0]).toContain('4.0.8 is published');
     expect(newerThan('4.0.10', '4.0.7')).toBe(true);
     expect(newerThan('4.0.7', '4.0.7')).toBe(false);
+  });
+  test('fails closed when npm audit itself fails or returns something that is not a complete report', () => {
+    const bad = [
+      null, [], { error: { code: 'ENOTFOUND', summary: 'request to registry failed' } }, { auditReportVersion: 1, vulnerabilities: {} },
+      { auditReportVersion: 2 }, { auditReportVersion: 2, vulnerabilities: {} },
+      { auditReportVersion: 2, vulnerabilities: {}, metadata: { vulnerabilities: { total: 3 } } },
+    ];
+    for (const r of bad) {
+      expect(evaluateAudit({ ...base, all: r }).ok, JSON.stringify(r)).toBe(false);
+      expect(evaluateAudit({ ...base, production: r }).ok, JSON.stringify(r)).toBe(false);
+    }
+    expect(evaluateAudit({ ...base, all: { error: { code: 'ENOTFOUND' } } }).failures[0]).toContain('npm audit failed (ENOTFOUND)');
   });
   test('warns (does not fail) when the registry cannot be asked, and when an exception is no longer needed', () => {
     const offline = evaluateAudit({ ...base, latest: { picomatch: null } });

@@ -19,6 +19,23 @@ export function advisoriesOf(report) {
   return out;
 }
 
+/**
+ * Fail closed: anything that is not a complete `npm audit --json` v2 report (network failure, registry error,
+ * truncated output) is an error, never "no advisories". @returns {string|null} error message or null when valid
+ */
+export function reportError(report, label) {
+  if (!report || typeof report !== 'object' || Array.isArray(report)) return `${label}: npm audit did not return a JSON object`;
+  if (report.error) return `${label}: npm audit failed (${String(report.error.code ?? report.error.summary ?? 'error').slice(0, 120)})`;
+  if (report.auditReportVersion !== 2) return `${label}: unexpected npm audit report version ${String(report.auditReportVersion)}`;
+  if (!report.vulnerabilities || typeof report.vulnerabilities !== 'object' || Array.isArray(report.vulnerabilities)) {
+    return `${label}: npm audit report has no vulnerabilities map`;
+  }
+  const total = report.metadata?.vulnerabilities?.total;
+  if (!Number.isInteger(total)) return `${label}: npm audit report has no vulnerability totals`;
+  if (total > 0 && Object.keys(report.vulnerabilities).length === 0) return `${label}: npm audit reported ${total} findings without details`;
+  return null;
+}
+
 const parts = v => String(v).split(/[.+-]/).slice(0, 3).map(n => Number.parseInt(n, 10) || 0);
 /** a > b for plain x.y.z versions. */
 export function newerThan(a, b) {
@@ -37,6 +54,8 @@ export function evaluateAudit({ all, production, exceptions, today, latest }) {
   const failures = [];
   const excepted = [];
   const warnings = [];
+  const invalid = [reportError(all, 'full audit'), reportError(production, 'production audit')].filter(Boolean);
+  if (invalid.length) return { ok: false, failures: invalid, excepted, warnings };
   const byId = new Map(exceptions.map(e => [String(e.id).toUpperCase(), e]));
   const prod = advisoriesOf(production);
   for (const [id, adv] of advisoriesOf(all)) {
