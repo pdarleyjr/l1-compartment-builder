@@ -39,7 +39,7 @@ export function buildSnapshot({ doc, revision = 0, pending = 0, syncState = 'con
   }
   const customQtys = isObj(d.customQtys) ? { ...d.customQtys } : {};
   const customTools = (Array.isArray(d.customTools) ? d.customTools : []).filter(t => isObj(t) && str(t.name))
-    .map(t => ({ name: t.name, qty: Number.isFinite(t.qty) ? t.qty : 1, dimensions: str(t.dimensions) }));
+    .map(t => ({ name: t.name, qty: Number.isFinite(t.qty) ? t.qty : 1, dimensions: str(t.dimensions), description: str(t.description) }));
   const customDimensions = isObj(d.customDimensions) ? { ...d.customDimensions } : {};
   const removed = new Set((Array.isArray(d.removedItems) ? d.removedItems : []).filter(v => typeof v === 'string'));
   const unverified = isObj(d.unverified) ? Object.fromEntries(Object.entries(d.unverified).map(([k, v]) => [k, str(v)])) : {};
@@ -55,7 +55,7 @@ export function buildSnapshot({ doc, revision = 0, pending = 0, syncState = 'con
   const assignedTotal = {};
   for (const slots of Object.values(allocations)) for (const n of slots) if (n) assignedTotal[n] = (assignedTotal[n] ?? 0) + 1;
   const describe = name => ({
-    name, equipmentId: idOf(name), qty: qtyOf(name), dimensions: dimsOf(name), description: VISUAL_DESCRIPTIONS[name] ?? '',
+    name, equipmentId: idOf(name), qty: qtyOf(name), dimensions: dimsOf(name), description: toolByName[name] ? toolByName[name].description : (VISUAL_DESCRIPTIONS[name] ?? ''),
     custom: name in toolByName,
     verification: name in unverified ? { status: 'needs_verification', reason: unverified[name] } : { status: 'verified', reason: '' },
   });

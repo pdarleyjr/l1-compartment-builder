@@ -112,12 +112,12 @@ describe('migrateV1toV2', () => {
 });
 
 describe('projectV1', () => {
-  test('strips v2-only fields and tool extras, returns copies', async () => {
+  test('strips v2-only fields (equipmentId), keeps tool descriptions, returns copies', async () => {
     const { doc } = await migrateV1toV2(v1Fixture());
     doc.customTools[0].description = 'thermal imager';
     doc.customTools[0].equipmentId = 'eq_0000000000000000';
     const proj = projectV1(doc);
-    expect(proj.customTools[0]).toEqual({ name: THERMAL, qty: 2, dimensions: '6 × 4 × 3 in' });
+    expect(proj.customTools[0]).toEqual({ name: THERMAL, qty: 2, dimensions: '6 × 4 × 3 in', description: 'thermal imager' });
     proj.allocations.LS1[0] = 'changed';
     expect(doc.allocations.LS1[0]).toBe(FOG);
   });

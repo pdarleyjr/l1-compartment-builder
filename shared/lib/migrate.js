@@ -12,7 +12,6 @@ const renameSlot = v => {
 
 const cleanTool = t => {
   const out = { ...t };
-  delete out.description;
   delete out.equipmentId;
   return out;
 };

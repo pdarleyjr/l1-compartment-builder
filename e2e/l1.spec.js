@@ -305,14 +305,14 @@ test.describe('API integration', () => {
     await expect(page.getByText('Approved concept', { exact: true })).toBeVisible();
     await expect(page.getByText('main image', { exact: true })).toBeVisible();
     await expect(page.getByText('Image may be outdated — equipment assignments changed')).toBeVisible();
-    // main + 2 presets + 1 other photo
-    const dots = page.getByRole('button', { name: /^Show image \d+ of 4$/ });
-    await expect(dots).toHaveCount(4);
+    // main + 3 presets + 1 other photo
+    const dots = page.getByRole('button', { name: /^Show image \d+ of 5$/ });
+    await expect(dots).toHaveCount(5);
     await expect(dots.first()).toHaveAttribute('aria-current', 'true');
     // keyboard
     await dots.first().focus();
     await page.keyboard.press('ArrowRight');
-    await expect(page.getByRole('img', { name: 'Compartment Photo' })).toBeVisible();
+    await expect(page.getByRole('img', { name: 'Loadout Rendering (2026-11-18)' })).toBeVisible();
     await expect(dots.nth(1)).toHaveAttribute('aria-current', 'true');
     await page.keyboard.press('ArrowLeft');
     await expect(page.getByRole('img', { name: 'Approved layout' })).toBeVisible();

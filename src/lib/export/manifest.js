@@ -36,16 +36,28 @@ export function buildManifest(snapshot) {
       for (const b of c.bundles) if (b.slotIndices.includes(slot)) found = b;
       return found ? { id: found.id, name: found.name } : null;
     };
+    const bundlesOf = slots => {
+      const by = new Map(); // bundle id -> {id, name, slots}, in first-slot order
+      for (const slot of slots) {
+        const b = bundleOf(slot);
+        if (!b) continue;
+        const key = `${b.id}\u0000${b.name}`;
+        const e = by.get(key) ?? { id: b.id, name: b.name, slots: [] };
+        e.slots.push(slot);
+        by.set(key, e);
+      }
+      return [...by.values()];
+    };
     const items = [...groups].map(([name, g]) => {
       const it = info.get(name);
       const verification = it?.verification ?? verifiedFlag;
       const line = {
         lineKey: `${c.id}:${it.equipmentId}`, equipmentId: it.equipmentId, name, quantity: g.slots.length, slots: g.slots,
-        assignmentIds: g.assignmentIds, bundle: bundleOf(g.slots[0]), custom: it.custom, description: it.description,
+        assignmentIds: g.assignmentIds, bundle: bundleOf(g.slots[0]), bundles: bundlesOf(g.slots), custom: it.custom, description: it.description,
         dimensions: it.dimensions, verification: { ...verification },
       };
       const per = perItem.get(it.equipmentId) ?? {};
-      per[c.id] = line.quantity;
+      per[c.id] = (per[c.id] ?? 0) + line.quantity;
       perItem.set(it.equipmentId, per);
       lines += 1;
       units += line.quantity;
@@ -127,7 +139,8 @@ export function verifyManifest(manifest) {
       units += l.quantity;
       if (!Array.isArray(l.slots) || l.quantity !== l.slots.length) errors.push(`${l.lineKey}: quantity ${l.quantity} does not equal its slot count`);
       if (l.lineKey !== `${c.id}:${l.equipmentId}`) errors.push(`${l.lineKey}: lineKey does not match ${c.id}:${l.equipmentId}`);
-      (byItem[l.equipmentId] ??= {})[c.id] = l.quantity;
+      const per = (byItem[l.equipmentId] ??= {});
+      per[c.id] = (per[c.id] ?? 0) + l.quantity;
     }
   }
   const t = m.totals ?? {};

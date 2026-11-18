@@ -4,6 +4,9 @@ import { COMP_LABEL } from '../../shared/apparatus.js';
 import ActionButtons from './ActionButtons.jsx';
 import AddToolForm from './AddToolForm.jsx';
 
+// eslint-disable-next-line no-control-regex
+const REASON_STRIP = /[\u0000-\u001F\u007F]/g;
+
 /**
  * Inventory Status panel: editable quantities, dimensions, names and custom tools.
  * @param {{plan:ReturnType<import('./usePlan.js').default>, actions:ReturnType<import('./usePlanActions.js').default>,
@@ -261,7 +264,7 @@ export default function InventoryPanel({ plan, actions, readOnly, onExport }) {
                           <div className="flex flex-col sm:flex-row gap-2">
                             <input id={`verify-${idx}`} autoFocus maxLength={300} value={verifyReason}
                               aria-label={`Verification reason for ${item.name}`}
-                              onChange={e => setVerifyReason(e.target.value)}
+                              onChange={e => setVerifyReason(e.target.value.replace(REASON_STRIP, ''))}
                               onKeyDown={e => { if (e.key === 'Escape') setVerifyItem(null); }}
                               placeholder="e.g. Model number not confirmed"
                               className="min-h-11 flex-1 border-2 border-amber-300 rounded px-2 py-1 text-xs focus:ring-2 focus:ring-amber-400 outline-none bg-white text-slate-800" />

@@ -184,3 +184,12 @@ describe('RS3 invariant', () => {
     expect(r.conflicts.filter(c => c.reason === 'INVALID').length).toBeGreaterThan(0);
   });
 });
+
+describe('plain text well-formedness', () => {
+  test('rejects lone surrogates, accepts paired ones', () => {
+    expect(validateOp(note('LS1', 'a\uD800b')).ok).toBe(false);
+    expect(validateOp(note('LS1', 'a\uDC00')).ok).toBe(false);
+    expect(validateOp({ op: 'setUnverified', name: 'a', reason: 'x\uD83D' }).ok).toBe(false);
+    expect(validateOp(note('LS1', 'ok 🧯'))).toEqual({ ok: true });
+  });
+});

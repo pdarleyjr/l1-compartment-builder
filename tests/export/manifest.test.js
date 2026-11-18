@@ -222,3 +222,70 @@ describe('legacy sheets golden', () => {
     expect(sheets.map(s => s.sheet)).toEqual(['Compartment Inventory', 'Equipment Catalog', 'Compartment Summary', 'Bundles and Kits', 'Notes and Exceptions', 'Export Metadata', 'Compartments', 'Inventory Status']);
   });
 });
+
+describe('RS3-like double bundles', () => {
+  const rs3Doc = () => {
+    const allocations = emptyAlloc();
+    [A, B, C, A, B, C].forEach((n, i) => { allocations.RS3[i] = n; });
+    // two bundles holding the same item types; slot 5 is listed by both (last wins for the single-bundle `bundle`)
+    return {
+      allocations,
+      bundles: { RS3: [
+        { id: 'b_one', name: 'Highrise Pack', colorIdx: 0, slotIndices: [0, 1, 2] },
+        { id: 'b_two', name: 'Highrise Pack 2', colorIdx: 1, slotIndices: [3, 4, 5] },
+      ] },
+    };
+  };
+
+  it('lists every bundle of a line in `bundles`, keeps `bundle` = first slot, totals unchanged', () => {
+    const { manifest: m } = make(rs3Doc());
+    const rs3 = comp(m, 'RS3');
+    expect(rs3.items).toHaveLength(3);
+    expect(new Set(rs3.items.map(l => l.lineKey)).size).toBe(3);
+    const a = rs3.items.find(l => l.name === A);
+    expect(a.quantity).toBe(2);
+    expect(a.bundle).toEqual({ id: 'b_one', name: 'Highrise Pack' });
+    expect(a.bundles).toEqual([{ id: 'b_one', name: 'Highrise Pack', slots: [0] }, { id: 'b_two', name: 'Highrise Pack 2', slots: [3] }]);
+    expect(m.totals).toMatchObject({ lines: 3, units: 6 });
+    expect(m.catalog.find(i => i.name === A).compartments).toEqual({ RS3: 2 });
+    expect(verifyManifest(m)).toEqual({ ok: true, errors: [] });
+  });
+
+  it('uses [] when a line has no bundle', () => {
+    const allocations = emptyAlloc();
+    allocations.LS1[0] = A;
+    const { manifest: m } = make({ allocations });
+    expect(comp(m, 'LS1').items[0].bundles).toEqual([]);
+  });
+
+  it('verifyManifest sums quantities per compartment', () => {
+    const { manifest: m } = make(rs3Doc());
+    const copy = structuredClone(m);
+    copy.source.snapshotSha256 = '';
+    const line = copy.compartments.find(c => c.id === 'RS3').items[0];
+    expect(line.quantity).toBe(2);
+    expect(verifyManifest(m).ok).toBe(true);
+  });
+
+  it('workbook shows both bundles in the inventory and one Bundles row per member slot', () => {
+    const { snapshot, manifest } = make(rs3Doc());
+    const sheets = buildWorkbookSheets(snapshot, manifest);
+    const rows = name => sheets.find(s => s.sheet === name).data.map(r => r.map(c => c.value));
+    const inv = rows('Compartment Inventory');
+    const aRow = inv.find(r => r[2] === 'RS3' && r[4] === A);
+    expect(aRow[8]).toBe('Highrise Pack (1); Highrise Pack 2 (4)');
+    const bundleRows = rows('Bundles and Kits').slice(1).filter(r => r[1] === COMP_LABEL.RS3);
+    expect(bundleRows.filter(r => r[2] === 'Highrise Pack')).toHaveLength(3);
+    expect(bundleRows.filter(r => r[2] === 'Highrise Pack 2')).toHaveLength(3);
+  });
+});
+
+describe('custom tool descriptions', () => {
+  it('flow into the manifest line and catalog', () => {
+    const allocations = emptyAlloc();
+    allocations.LS1[0] = 'Zed Tool';
+    const { manifest: m } = make({ allocations, customTools: [{ name: 'Zed Tool', qty: 1, dimensions: '1 in', description: 'A zed tool' }] });
+    expect(comp(m, 'LS1').items[0]).toMatchObject({ custom: true, description: 'A zed tool' });
+    expect(m.catalog.find(i => i.name === 'Zed Tool').description).toBe('A zed tool');
+  });
+});

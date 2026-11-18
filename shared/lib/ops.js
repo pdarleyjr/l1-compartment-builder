@@ -28,7 +28,8 @@ const SHAPES = {
 // Plain text: \n and \t allowed, every other C0 control character (and DEL) rejected.
 // eslint-disable-next-line no-control-regex
 const CONTROL_CHARS = /[\u0000-\u0008\u000B-\u001F\u007F]/;
-const plainText = (v, max) => typeof v === 'string' && v.length <= max && !CONTROL_CHARS.test(v);
+const wellFormed = v => (typeof v.isWellFormed === 'function' ? v.isWellFormed() : !/[\uD800-\uDFFF]/.test(v.replace(/[\uD800-\uDBFF][\uDC00-\uDFFF]/g, '')));
+const plainText = (v, max) => typeof v === 'string' && v.length <= max && !CONTROL_CHARS.test(v) && wellFormed(v);
 const checks = {
   comp: v => typeof v === 'string' && v.length > 0 && v.length <= 50,
   index: v => isInt(v, 0, PLANNER_LIMITS.maxSlotsPerCompartment - 1),

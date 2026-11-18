@@ -48,6 +48,7 @@ export function sanitizeView(raw) {
   if (Array.isArray(raw.customTools)) {
     out.customTools = raw.customTools.filter(t => isObj(t) && str(t.name)).map(t => ({
       name: t.name, qty: Number.isFinite(t.qty) ? t.qty : 1, dimensions: str(t.dimensions),
+      ...(str(t.description) && t.description.length <= 2000 ? { description: t.description } : {}),
     }));
   }
   if (isObj(raw.customDimensions)) for (const [k, v] of Object.entries(raw.customDimensions)) if (typeof v === 'string') out.customDimensions[k] = v;

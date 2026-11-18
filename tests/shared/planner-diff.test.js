@@ -174,3 +174,14 @@ describe('concurrent clients through diff → apply (SD-01 / SD-09)', () => {
 const GATE = '2.5 in Gate Valve';
 const CO2 = 'CO2 Extinguisher';
 const LDH_NAME = '5 in LDH Hose 100 ft Sections (PF-50Y-100)';
+
+describe('custom tool descriptions', () => {
+  test('readDoc → sanitizeView → diffDocs of an unchanged view emits nothing', async () => {
+    const { sanitizeView } = await import('../../src/lib/planner-sync.js');
+    const { doc } = await migrateV1toV2(v1Fixture(), { newId: counterIds() });
+    const withTool = applyOps(doc, [{ op: 'upsertCustomTool', tool: { name: 'Zed', qty: 2, dimensions: '1 in', description: 'Described' } }], ctx()).doc;
+    const view = sanitizeView(projectV1(withTool));
+    expect(view.customTools.find(t => t.name === 'Zed').description).toBe('Described');
+    expect(diffDocs(withTool, sanitizeView(projectV1(withTool)))).toEqual([]);
+  });
+});

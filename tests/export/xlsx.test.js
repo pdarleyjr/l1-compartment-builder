@@ -55,7 +55,7 @@ describe('real xlsx output', () => {
       expect(row, l.lineKey).toBeTruthy();
       expect(row[6]).toBe(l.quantity);
       expect(row[7]).toBe(l.slots.map(s => s + 1).join(', '));
-      expect(row[8] ?? '').toBe(l.bundle?.name ?? '');
+      expect(row[8] ?? '').toBe((l.bundles ?? []).map(b => `${b.name} (${b.slots.map(s => s + 1).join(', ')})`).join('; '));
     }
     const meta = Object.fromEntries(data['Export Metadata'].slice(1).map(r => [r[0], r[1]]));
     expect(meta['Total lines']).toBe(manifest.totals.lines);

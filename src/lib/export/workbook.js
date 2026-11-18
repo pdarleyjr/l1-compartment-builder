@@ -15,6 +15,7 @@ const cell = (value, header) => ({
 });
 const toSheet = rows => rows.map((row, i) => row.map(v => cell(v, i === 0)));
 const sheet = (name, headers, rows, widths) => ({ sheet: name, data: toSheet([headers, ...rows]), stickyRowsCount: 1, columns: widths.map(width => ({ width })) });
+const bundleText = l => (l.bundles ?? []).map(b => `${b.name} (${b.slots.map(s => s + 1).join(', ')})`).join('; ');
 const yesNo = b => (b ? 'Yes' : 'No');
 const verText = v => (v.status === 'needs_verification' ? 'Needs verification' : 'Verified');
 
@@ -72,7 +73,7 @@ export function buildWorkbookSheets(snapshot, manifest) {
   for (const c of manifest.compartments) {
     for (const l of c.items) {
       invRows.push([
-        c.order + 1, c.label, c.id, c.side, l.name, l.equipmentId, l.quantity, l.slots.map(s => s + 1).join(', '), l.bundle?.name ?? '',
+        c.order + 1, c.label, c.id, c.side, l.name, l.equipmentId, l.quantity, l.slots.map(s => s + 1).join(', '), bundleText(l),
         yesNo(l.custom), verText(l.verification), l.verification.reason, l.dimensions, l.description, c.note?.text ?? '',
       ]);
     }
