@@ -86,6 +86,9 @@ test('signed-out user reads the note but cannot edit', async ({ browser }) => {
   await goTo(a.page, 'LS1');
   await expect(a.page.getByTestId('note-text')).toHaveText('Read me');
   await expect(a.page.getByRole('button', { name: /^(Edit notes|Add note)/ })).toHaveCount(0);
+  // A viewer never sees a "not synced" claim: nothing of theirs is pending.
+  await expect(a.page.getByTestId('note-status')).toHaveText(/^Updated /);
+  await expect(a.page.getByText(/not synced/)).toHaveCount(0);
   await goTo(a.page, 'LS2');
   await expect(a.page.getByRole('heading', { name: 'Notes' })).toHaveCount(0);
 });

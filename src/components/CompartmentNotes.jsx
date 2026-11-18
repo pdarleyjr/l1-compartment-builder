@@ -20,7 +20,7 @@ function clearDraft(compId) {
   try { localStorage.removeItem(draftKey(compId)); } catch { /* storage unavailable */ }
 }
 
-const timeOf = ts => new Date(ts).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+const whenOf = ts => new Date(ts).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 const btn = 'touch-target min-h-11 px-4 rounded-lg text-sm font-semibold transition-colors touch-manipulation';
 
 /**
@@ -71,12 +71,14 @@ export default function CompartmentNotes({ comp, note, serverNote, sync, readOnl
 
   if (readOnly && !localText) return null;
 
+  // "Not synced" only when THIS device holds note text the server does not have yet (a queued edit, or a save that is
+  // not confirmed). Viewers and editors who changed nothing see when the team copy was last updated.
+  const unsynced = localText !== serverText || (mine !== null && mine !== serverText);
   let status = '';
-  if (conflict) status = '';
-  else if (localText) {
-    status = settled && serverText === localText
-      ? `Saved to the team plan · ${timeOf(serverNote.updatedAt)}`
-      : 'Saved on this device — not synced yet';
+  if (conflict || !sync?.hasDoc) status = '';
+  else if (unsynced) status = 'Saved on this device — not synced yet';
+  else if (localText && serverNote?.updatedAt) {
+    status = readOnly ? `Updated ${whenOf(serverNote.updatedAt)}` : `Saved to the team plan · ${whenOf(serverNote.updatedAt)}`;
   }
 
   return (
